@@ -5,8 +5,7 @@ plugins {
     id("com.diffplug.spotless") version "7.0.2"
     id("checkstyle")
     id("jacoco")
-    id("maven-publish")
-    id("signing")
+    id("com.vanniktech.maven.publish") version "0.30.0"
 }
 
 group = "io.github.sequelcore"
@@ -121,63 +120,40 @@ tasks.register("qualityCheck") {
     group = "verification"
 }
 
-// Publishing configuration
-publishing {
-    publications {
-        create<MavenPublication>("mavenJava") {
-            from(components["java"])
+// Maven Central Publishing via vanniktech plugin
+mavenPublishing {
+    publishToMavenCentral(com.vanniktech.maven.publish.SonatypeHost.CENTRAL_PORTAL, automaticRelease = true)
+    signAllPublications()
 
-            pom {
-                name = "Vigil"
-                description = "Opinionated JWT authentication starter for Spring Boot"
-                url = "https://github.com/sequelcore/vigil"
+    coordinates(group.toString(), "vigil-spring-boot-starter", version.toString())
 
-                licenses {
-                    license {
-                        name = "Apache License, Version 2.0"
-                        url = "https://www.apache.org/licenses/LICENSE-2.0"
-                    }
-                }
+    pom {
+        name.set("Vigil")
+        description.set("Opinionated JWT authentication starter for Spring Boot")
+        inceptionYear.set("2025")
+        url.set("https://github.com/sequelcore/vigil")
 
-                developers {
-                    developer {
-                        id = "sequelcore"
-                        name = "Sequel"
-                        url = "https://github.com/sequelcore"
-                    }
-                }
-
-                scm {
-                    connection = "scm:git:git://github.com/sequelcore/vigil.git"
-                    developerConnection = "scm:git:ssh://github.com/sequelcore/vigil.git"
-                    url = "https://github.com/sequelcore/vigil"
-                }
+        licenses {
+            license {
+                name.set("Apache License, Version 2.0")
+                url.set("https://www.apache.org/licenses/LICENSE-2.0")
+                distribution.set("repo")
             }
         }
-    }
 
-    repositories {
-        maven {
-            name = "CentralPortal"
-            // Using OSSRH Staging API compatibility layer that transfers to Central Portal
-            val releasesRepoUrl = uri("https://central.sonatype.com/api/v1/publisher/deployments/upload/")
-            val snapshotsRepoUrl = uri("https://central.sonatype.com/api/v1/publisher/deployments/upload/")
-            url = if (version.toString().endsWith("SNAPSHOT")) snapshotsRepoUrl else releasesRepoUrl
-
-            credentials {
-                username = System.getenv("MAVEN_USERNAME") ?: ""
-                password = System.getenv("MAVEN_PASSWORD") ?: ""
+        developers {
+            developer {
+                id.set("sequelcore")
+                name.set("Sequel")
+                url.set("https://github.com/sequelcore")
             }
         }
-    }
-}
 
-signing {
-    val signingKey = System.getenv("GPG_PRIVATE_KEY")
-    val signingPassword = System.getenv("GPG_PASSPHRASE")
-    if (signingKey != null && signingPassword != null) {
-        useInMemoryPgpKeys(signingKey, signingPassword)
-        sign(publishing.publications["mavenJava"])
+        scm {
+            url.set("https://github.com/sequelcore/vigil")
+            connection.set("scm:git:git://github.com/sequelcore/vigil.git")
+            developerConnection.set("scm:git:ssh://github.com/sequelcore/vigil.git")
+        }
     }
 }
 
