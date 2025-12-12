@@ -15,6 +15,21 @@ This file provides guidance to Claude Code when working with this repository.
 - **Java:** 21 LTS
 - **Spring Boot:** 3.5.x
 
+## Reference Projects
+
+These Sequel projects use patterns that Vigil extracts and standardizes:
+
+- **SHRAD:** `C:\Proyectos\Sequel\Shrad\shrad\backend`
+  - Multi-tenant JWT with `X-Tenant-ID` header
+  - Cookie-based token storage (HttpOnly)
+  - BCrypt with cost factor 12
+  - `TenantContext` ThreadLocal pattern
+
+- **Quesoro:** `C:\Proyectos\Sequel\quesoro\backend`
+  - Token blacklist with Caffeine cache
+  - Login attempt tracking and account lockout
+  - Dual client support (web cookies / mobile tokens)
+
 ## Commands
 
 ```bash
