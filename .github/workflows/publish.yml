@@ -69,7 +69,7 @@ jobs:
           gradle-version: wrapper
 
       - name: Install Doppler CLI
-        run: curl -Ls https://cli.doppler.com/install.sh | sh
+        run: curl -Ls https://cli.doppler.com/install.sh | sudo sh
 
       - name: Load secrets from Doppler
         run: doppler secrets download --project sequel-core --config prd --format env --no-file >> "$GITHUB_ENV"
