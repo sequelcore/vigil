@@ -78,8 +78,15 @@ jobs:
           doppler-config: prd
           inject-env-vars: true
 
+      - name: Verify secrets are loaded
+        run: |
+          echo "MAVEN_USERNAME is set: $([[ -n "$MAVEN_USERNAME" ]] && echo 'yes' || echo 'no')"
+          echo "MAVEN_PASSWORD is set: $([[ -n "$MAVEN_PASSWORD" ]] && echo 'yes' || echo 'no')"
+          echo "GPG_PRIVATE_KEY is set: $([[ -n "$GPG_PRIVATE_KEY" ]] && echo 'yes' || echo 'no')"
+          echo "GPG_PASSPHRASE is set: $([[ -n "$GPG_PASSPHRASE" ]] && echo 'yes' || echo 'no')"
+
       - name: Publish to Maven Central
-        run: ./gradlew publish
+        run: ./gradlew publish --info
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v1
