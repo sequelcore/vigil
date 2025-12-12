@@ -159,8 +159,9 @@ publishing {
     repositories {
         maven {
             name = "CentralPortal"
-            val releasesRepoUrl = uri("https://central.sonatype.com/api/v1/publisher/upload?name=io.github.sequelcore&publishingType=AUTOMATIC")
-            val snapshotsRepoUrl = uri("https://central.sonatype.com/repository/maven-snapshots/")
+            // Using OSSRH Staging API compatibility layer that transfers to Central Portal
+            val releasesRepoUrl = uri("https://central.sonatype.com/api/v1/publisher/deployments/upload/")
+            val snapshotsRepoUrl = uri("https://central.sonatype.com/api/v1/publisher/deployments/upload/")
             url = if (version.toString().endsWith("SNAPSHOT")) snapshotsRepoUrl else releasesRepoUrl
 
             credentials {
