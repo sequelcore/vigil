@@ -2,6 +2,7 @@
 
 Opinionated JWT authentication starter for Spring Boot. Stop copy-pasting auth boilerplate.
 
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.sequelcore/vigil-spring-boot-starter.svg)](https://central.sonatype.com/artifact/io.github.sequelcore/vigil-spring-boot-starter)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Java](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/projects/jdk/21/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5-green.svg)](https://spring.io/projects/spring-boot)
@@ -95,7 +96,7 @@ public class AuthController {
 ```yaml
 vigil:
   jwt:
-    secret: ${JWT_SECRET}           # Required
+    secret: ${JWT_SECRET}           # Required (min 32 chars)
     access-ttl: 15m                 # Default: 15 minutes
     refresh-ttl: 7d                 # Default: 7 days
     issuer: my-app                  # Optional
@@ -104,12 +105,18 @@ vigil:
   cookie:
     access-token-name: access_token
     refresh-token-name: refresh_token
-    secure: true                    # Set false for local development
+    secure: true                    # Set false for local dev
     same-site: Lax                  # Lax, Strict, or None
     http-only: true
 
   password:
-    strength: 12                    # BCrypt cost factor (10-14 recommended)
+    strength: 12                    # BCrypt cost factor (10-14)
+
+  filter:
+    enabled: false                  # Enable auth filter
+    public-paths:                   # Paths that bypass auth
+      - /public/**
+      - /health
 
   blacklist:
     enabled: false                  # Enable token blacklist
@@ -117,11 +124,11 @@ vigil:
     ttl: 24h
 
   tenant:
-    enabled: false                  # Enable multi-tenant support
+    enabled: false                  # Enable multi-tenant
     header-name: X-Tenant-ID
 
   protection:
-    enabled: false                  # Enable login attempt tracking
+    enabled: false                  # Enable brute-force protection
     max-attempts: 5
     lock-duration: 15m
 ```

@@ -15,7 +15,6 @@ java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
     }
-    // Note: javadocJar and sourcesJar are handled by vanniktech maven-publish plugin
 }
 
 repositories {
