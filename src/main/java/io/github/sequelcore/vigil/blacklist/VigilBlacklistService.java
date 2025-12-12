@@ -9,6 +9,11 @@ public class VigilBlacklistService {
 
   private final Cache<String, Boolean> blacklist;
 
+  /**
+   * Creates a blacklist service backed by Caffeine.
+   *
+   * @param blacklistConfig blacklist configuration properties
+   */
   public VigilBlacklistService(VigilProperties.Blacklist blacklistConfig) {
     this.blacklist =
         Caffeine.newBuilder()

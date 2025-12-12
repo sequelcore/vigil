@@ -18,6 +18,11 @@ public class VigilTokenService {
   private final VigilProperties.Jwt jwtConfig;
   @Getter private final SecretKey signingKey;
 
+  /**
+   * Creates a token service with the provided JWT configuration.
+   *
+   * @param jwtConfig JWT configuration properties
+   */
   public VigilTokenService(VigilProperties.Jwt jwtConfig) {
     this.jwtConfig = jwtConfig;
     this.signingKey = Keys.hmacShaKeyFor(jwtConfig.secret().getBytes(StandardCharsets.UTF_8));

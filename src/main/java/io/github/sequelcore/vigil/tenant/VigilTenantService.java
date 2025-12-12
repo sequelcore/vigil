@@ -4,13 +4,20 @@ import io.github.sequelcore.vigil.autoconfigure.VigilProperties;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.Optional;
 import java.util.UUID;
-import lombok.RequiredArgsConstructor;
 
 /** Service for managing multi-tenant context. */
-@RequiredArgsConstructor
 public class VigilTenantService {
 
   private final VigilProperties.Tenant tenantConfig;
+
+  /**
+   * Creates a tenant service with the provided configuration.
+   *
+   * @param tenantConfig tenant configuration properties
+   */
+  public VigilTenantService(VigilProperties.Tenant tenantConfig) {
+    this.tenantConfig = tenantConfig;
+  }
 
   /**
    * Extracts the tenant ID from the request header.

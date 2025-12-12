@@ -6,14 +6,23 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.Arrays;
 import java.util.Optional;
-import lombok.RequiredArgsConstructor;
 
 /** Service for managing authentication cookies. */
-@RequiredArgsConstructor
 public class VigilCookieService {
 
   private final VigilProperties.Cookie cookieConfig;
   private final VigilProperties.Jwt jwtConfig;
+
+  /**
+   * Creates a cookie service using the provided configuration.
+   *
+   * @param cookieConfig cookie configuration properties
+   * @param jwtConfig JWT configuration properties
+   */
+  public VigilCookieService(VigilProperties.Cookie cookieConfig, VigilProperties.Jwt jwtConfig) {
+    this.cookieConfig = cookieConfig;
+    this.jwtConfig = jwtConfig;
+  }
 
   /**
    * Sets the access token cookie on the response.

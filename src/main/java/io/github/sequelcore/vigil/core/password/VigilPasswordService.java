@@ -9,6 +9,11 @@ public class VigilPasswordService {
 
   @Getter private final BCryptPasswordEncoder encoder;
 
+  /**
+   * Creates a password service configured with the provided BCrypt strength.
+   *
+   * @param passwordConfig password configuration properties
+   */
   public VigilPasswordService(VigilProperties.Password passwordConfig) {
     this.encoder = new BCryptPasswordEncoder(passwordConfig.strength());
   }
@@ -77,6 +82,11 @@ public class VigilPasswordService {
     return new PasswordValidationResult(true, null);
   }
 
-  /** Result of password validation. */
+  /**
+   * Result of password validation.
+   *
+   * @param valid whether the password is valid
+   * @param message optional validation message when invalid
+   */
   public record PasswordValidationResult(boolean valid, String message) {}
 }

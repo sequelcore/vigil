@@ -11,6 +11,11 @@ public class VigilProtectionService {
   private final VigilProperties.Protection protectionConfig;
   private final Cache<String, LoginAttemptInfo> attempts;
 
+  /**
+   * Creates a protection service for tracking login attempts.
+   *
+   * @param protectionConfig login protection configuration properties
+   */
   public VigilProtectionService(VigilProperties.Protection protectionConfig) {
     this.protectionConfig = protectionConfig;
     this.attempts =
