@@ -8,7 +8,7 @@
 - [x] Set up Spotless, Checkstyle, JaCoCo
 - [x] Configure Maven Central publishing
 - [x] Set up GitHub Actions CI/CD
-  - CI workflow (build, test, quality checks on push/PR)
+  - CI workflow (build, test, quality checks on push/PR) ✅ passing
   - Publish workflow (Maven Central publishing on tags)
   - Doppler integration for secret management
 
