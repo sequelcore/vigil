@@ -71,15 +71,13 @@ jobs:
       - name: Install Doppler CLI
         run: curl -Ls https://cli.doppler.com/install.sh | sudo sh
 
-      - name: Load secrets from Doppler
-        run: doppler secrets download --project sequel-core --config prd --format env --no-file >> "$GITHUB_ENV"
-
-      - name: Import GPG key
+      - name: Import GPG key and publish
         run: |
+          eval $(doppler secrets download --project sequel-core --config prd --format docker --no-file)
           echo "$GPG_PRIVATE_KEY" | gpg --batch --import
-
-      - name: Publish to Maven Central
-        run: ./gradlew publish
+          ./gradlew publish
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v1
