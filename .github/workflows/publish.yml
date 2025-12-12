@@ -52,7 +52,6 @@ jobs:
       contents: write
     env:
       GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx2g
-      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -69,19 +68,15 @@ jobs:
           gradle-version: wrapper
 
       - name: Install Doppler CLI
-        run: curl -Ls https://cli.doppler.com/install.sh | sudo sh
+        uses: dopplerhq/cli-action@v3
 
-      - name: Load secrets from Doppler
-        run: |
-          echo "MAVEN_USERNAME=$(doppler secrets get MAVEN_USERNAME --plain --project sequel-core --config prd)" >> $GITHUB_ENV
-          echo "MAVEN_PASSWORD=$(doppler secrets get MAVEN_PASSWORD --plain --project sequel-core --config prd)" >> $GITHUB_ENV
-          echo "GPG_PASSPHRASE=$(doppler secrets get GPG_PASSPHRASE --plain --project sequel-core --config prd)" >> $GITHUB_ENV
-          doppler secrets get GPG_PRIVATE_KEY --plain --project sequel-core --config prd > /tmp/gpg_key.asc
-        env:
-          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
-
-      - name: Import GPG key
-        run: gpg --batch --import /tmp/gpg_key.asc
+      - name: Fetch secrets from Doppler
+        uses: dopplerhq/secrets-fetch-action@v1.3.0
+        with:
+          doppler-token: ${{ secrets.DOPPLER_TOKEN }}
+          doppler-project: sequel-core
+          doppler-config: prd
+          inject-env-vars: true
 
       - name: Publish to Maven Central
         run: ./gradlew publish
