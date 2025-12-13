@@ -115,32 +115,58 @@ Preparation for key rotation in v2.0.0:
 
 ## Phase 3: Advanced Features (v1.2.0) - Planned
 
-### 3.1 Argon2id Password Hashing
+> **Spec:** [docs/IP_DEVICE_SPEC.md](docs/IP_DEVICE_SPEC.md)
+> **Architecture:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
-> "Argon2id should be the first choice for password hashing. BCrypt should only be used for legacy systems." — [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)
+### 3.1 IP & Device Security
 
-- [ ] Add `VigilArgon2Service` (19 MiB memory, 2 iterations, 1 parallelism)
-- [ ] `vigil.password.algorithm` config (argon2id | bcrypt)
-- [ ] Automatic migration: re-hash on login if BCrypt detected
-- [ ] BCrypt 72-byte limit warning
+#### IP Protection (Native)
+- [ ] IP logging in session metadata (audit trail)
+- [ ] IP change detection mid-session
+- [ ] Impossible travel detection (geolocation jumps)
+- [ ] `VigilIpService` - IP extraction, validation, geolocation
+
+#### Device Tracking (Optional)
+- [ ] Device fingerprinting (User-Agent, headers)
+- [ ] Device ID generation and storage
+- [ ] Trusted device management
+- [ ] New device detection + alerts
+- [ ] `VigilDeviceService` - fingerprinting, trust management
+
+#### Anomaly Detection (Native)
+- [ ] IP + Device change within 5 min → force re-auth
+- [ ] Geolocation jump >500km/h → auto-logout
+- [ ] Multiple IPs same session → suspicious flag
+- [ ] `VigilAnomalyService` - detection rules engine
 
 ### 3.2 Session Management
+
 - [ ] Session ID (`sid`) claim in tokens
-- [ ] Per-session revocation support
-- [ ] Device/session tracking interfaces
-- [ ] Concurrent session limits (configurable)
+- [ ] Session metadata: `ip`, `deviceId`, `location`, `userAgent`
+- [ ] Per-session revocation API
+- [ ] Concurrent session limits (per user/device)
+- [ ] `VigilSessionService` - session lifecycle management
 
-### 3.3 Observability
+### 3.3 Argon2id Password Hashing
+
+- [ ] `VigilArgon2Service` (19 MiB memory, 2 iterations, 1 parallelism)
+- [ ] `vigil.password.algorithm` config (argon2id | bcrypt)
+- [ ] Automatic migration: re-hash on login if BCrypt detected
+
+### 3.4 Observability
+
 - [ ] Micrometer metrics for auth events
-- [ ] `vigil.auth.login.success` / `vigil.auth.login.failure` counters
-- [ ] `vigil.token.generation.time` / `vigil.token.validation.time` timers
-- [ ] Security event logging (token reuse detected, lockout triggered)
+- [ ] Counters: `vigil.auth.login.success`, `vigil.auth.login.failure`
+- [ ] Counters: `vigil.anomaly.detected`, `vigil.device.new`
+- [ ] Timers: `vigil.token.generation.time`, `vigil.token.validation.time`
+- [ ] Security event logging (anomaly detected, device added, lockout)
 
-### 3.4 Redis Adapters
-- [ ] Redis-based token blacklist (alternative to Caffeine)
-- [ ] Redis-based login attempt tracking
-- [ ] Redis-based token family storage (for rotation)
-- [ ] Optional dependency, auto-detected via Spring Data Redis
+### 3.5 Redis Adapters
+
+- [ ] Redis-based token blacklist
+- [ ] Redis-based session storage
+- [ ] Redis-based device registry
+- [ ] Auto-detected via Spring Data Redis
 
 ---
 
@@ -197,6 +223,9 @@ These are **always enforced** because disabling them creates vulnerabilities:
 | Algorithm `none` rejection | CVE-2015-9235 | Critical bypass vulnerability |
 | Algorithm enforcement (v1.1) | CVE-2024-54150, CVE-2024-37568 | Key confusion attacks |
 | Claims validation (v1.1) | OWASP JWT Cheat Sheet | Basic JWT security |
+| IP logging (v1.2) | NIST SP 800-63-4 | Audit trail, forensics |
+| IP change detection (v1.2) | OWASP Session | Session hijacking defense |
+| Anomaly detection (v1.2) | Auth0/Okta | Impossible travel, suspicious activity |
 | HttpOnly cookies | MDN Security Guide | XSS protection |
 | Secure flag in production | MDN Security Guide | MITM protection |
 | SameSite cookie attribute | MDN Security Guide | CSRF protection |
@@ -224,6 +253,8 @@ These depend on the application's requirements:
 |---------|---------|------------------|
 | Public paths | `[]` | Varies per API design |
 | Multi-tenant | Off | Architecture decision |
+| Device tracking (v1.2) | Off | Privacy/UX tradeoff |
+| Trusted devices (v1.2) | Off | UX tradeoff |
 | Cookie names | `vigil_*` | Integration requirements |
 | Issuer/Audience | app name | Deployment-specific |
 | Storage backend | Caffeine | Infrastructure varies |
@@ -247,5 +278,5 @@ These depend on the application's requirements:
 |---------|--------|-------------|
 | 1.0.0 | Released | Core JWT, password, cookies with native filter, blacklist, and brute-force protection |
 | 1.1.0 | Planned | Native token rotation, algorithm enforcement, claims validation, sidejacking prevention |
-| 1.2.0 | Planned | Argon2id, sessions, observability, Redis adapters |
+| 1.2.0 | Planned | IP/device security, session management, anomaly detection, Argon2id, observability, Redis |
 | 2.0.0 | Future | Key rotation, JWKS, asymmetric keys, OAuth wrappers, event hooks |
