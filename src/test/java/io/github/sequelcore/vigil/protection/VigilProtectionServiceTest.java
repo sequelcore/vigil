@@ -15,8 +15,7 @@ class VigilProtectionServiceTest {
   @BeforeEach
   void setUp() {
     protectionService =
-        new VigilProtectionService(
-            new VigilProperties.Protection(true, 3, Duration.ofMinutes(1), 50));
+        new VigilProtectionService(new VigilProperties.Protection(3, Duration.ofMinutes(1), 50));
   }
 
   @Test

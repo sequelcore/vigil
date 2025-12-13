@@ -4,16 +4,12 @@ vigil:
     access-ttl: 15m
     refresh-ttl: 7d
   filter:
-    enabled: true
     public-paths:
       - /public/**
       - /health
       - /auth/**
-  blacklist:
-    enabled: true
   tenant:
     enabled: true
   protection:
-    enabled: true
     max-attempts: 3
 

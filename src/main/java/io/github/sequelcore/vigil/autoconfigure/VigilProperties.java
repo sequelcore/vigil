@@ -51,16 +51,16 @@ public record VigilProperties(
       password = new Password(12);
     }
     if (blacklist == null) {
-      blacklist = new Blacklist(false, 10000, Duration.ofHours(24));
+      blacklist = new Blacklist(10000, Duration.ofHours(24));
     }
     if (tenant == null) {
       tenant = new Tenant(false, "X-Tenant-ID");
     }
     if (protection == null) {
-      protection = new Protection(false, 5, Duration.ofMinutes(15), 10000);
+      protection = new Protection(5, Duration.ofMinutes(15), 10000);
     }
     if (filter == null) {
-      filter = new Filter(false, Collections.emptyList());
+      filter = new Filter(Collections.emptyList());
     }
   }
 
@@ -156,15 +156,13 @@ public record VigilProperties(
   /**
    * Token blacklist configuration.
    *
-   * @param enabled whether the blacklist is enabled
    * @param maxSize maximum number of tokens to keep
    * @param ttl time-to-live for blacklisted tokens
    */
-  public record Blacklist(boolean enabled, int maxSize, Duration ttl) {
+  public record Blacklist(int maxSize, Duration ttl) {
     /**
      * Validates and normalizes blacklist settings.
      *
-     * @param enabled whether the blacklist is enabled
      * @param maxSize maximum number of tokens to keep
      * @param ttl time-to-live for blacklisted tokens
      */
@@ -201,16 +199,14 @@ public record VigilProperties(
   /**
    * Login protection configuration.
    *
-   * @param enabled whether login protection is enabled
    * @param maxAttempts number of attempts before lockout
    * @param lockDuration how long a lockout lasts
    * @param maxSize maximum entries to track in cache
    */
-  public record Protection(boolean enabled, int maxAttempts, Duration lockDuration, int maxSize) {
+  public record Protection(int maxAttempts, Duration lockDuration, int maxSize) {
     /**
      * Validates and normalizes protection settings.
      *
-     * @param enabled whether login protection is enabled
      * @param maxAttempts number of attempts before lockout
      * @param lockDuration how long a lockout lasts
      * @param maxSize maximum entries to track in cache
@@ -231,14 +227,12 @@ public record VigilProperties(
   /**
    * Authentication filter configuration.
    *
-   * @param enabled whether the filter is enabled
    * @param publicPaths list of paths that bypass authentication
    */
-  public record Filter(boolean enabled, List<String> publicPaths) {
+  public record Filter(List<String> publicPaths) {
     /**
      * Applies defaults when no public paths are provided.
      *
-     * @param enabled whether the filter is enabled
      * @param publicPaths list of paths that bypass authentication
      */
     public Filter {

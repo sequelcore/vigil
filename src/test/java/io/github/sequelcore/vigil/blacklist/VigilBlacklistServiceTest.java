@@ -15,7 +15,7 @@ class VigilBlacklistServiceTest {
   @BeforeEach
   void setUp() {
     blacklistService =
-        new VigilBlacklistService(new VigilProperties.Blacklist(true, 100, Duration.ofMinutes(30)));
+        new VigilBlacklistService(new VigilProperties.Blacklist(100, Duration.ofMinutes(30)));
   }
 
   @Test

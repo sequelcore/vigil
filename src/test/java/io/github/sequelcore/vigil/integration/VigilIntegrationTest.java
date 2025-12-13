@@ -48,7 +48,6 @@ class VigilIntegrationTest {
     assertThat(tokenService).isNotNull();
     assertThat(blacklistService).isNotNull();
     assertThat(protectionService).isNotNull();
-    assertThat(properties.blacklist().enabled()).isTrue();
     assertThat(properties.tenant().enabled()).isTrue();
     assertThat(properties.protection().maxAttempts()).isEqualTo(3);
     assertThat(properties.filter().publicPaths()).contains("/public/**", "/health");

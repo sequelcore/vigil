@@ -17,8 +17,8 @@ import org.springframework.lang.Nullable;
 /**
  * Auto-configuration for the Vigil authentication starter.
  *
- * <p>Registers core services, optional modules (blacklist, tenant, protection), and the
- * authentication filter based on {@code vigil.*} configuration properties.
+ * <p>Registers core services and the authentication filter. Multi-tenant support is optional and
+ * enabled via {@code vigil.tenant.enabled}.
  */
 @AutoConfiguration
 @EnableConfigurationProperties(VigilProperties.class)
@@ -64,14 +64,13 @@ public class VigilAutoConfiguration {
   }
 
   /**
-   * Creates the blacklist service when token blacklisting is enabled.
+   * Creates the blacklist service for token invalidation.
    *
    * @param properties the loaded Vigil properties
    * @return configured blacklist service
    */
   @Bean
   @ConditionalOnMissingBean
-  @ConditionalOnProperty(prefix = "vigil.blacklist", name = "enabled", havingValue = "true")
   public VigilBlacklistService vigilBlacklistService(VigilProperties properties) {
     return new VigilBlacklistService(properties.blacklist());
   }
@@ -90,36 +89,34 @@ public class VigilAutoConfiguration {
   }
 
   /**
-   * Creates the protection service when brute-force protection is enabled.
+   * Creates the protection service for brute-force prevention.
    *
    * @param properties the loaded Vigil properties
    * @return configured protection service
    */
   @Bean
   @ConditionalOnMissingBean
-  @ConditionalOnProperty(prefix = "vigil.protection", name = "enabled", havingValue = "true")
   public VigilProtectionService vigilProtectionService(VigilProperties properties) {
     return new VigilProtectionService(properties.protection());
   }
 
   /**
-   * Creates the authentication filter when enabled.
+   * Creates the authentication filter.
    *
    * @param properties the loaded Vigil properties
    * @param tokenService the token service for JWT validation
    * @param cookieService the cookie service for token extraction
-   * @param blacklistService optional blacklist service
+   * @param blacklistService the blacklist service for token invalidation
    * @param tenantService optional tenant service
    * @return configured authentication filter
    */
   @Bean
   @ConditionalOnMissingBean
-  @ConditionalOnProperty(prefix = "vigil.filter", name = "enabled", havingValue = "true")
   public VigilAuthenticationFilter vigilAuthenticationFilter(
       VigilProperties properties,
       VigilTokenService tokenService,
       VigilCookieService cookieService,
-      @Nullable VigilBlacklistService blacklistService,
+      VigilBlacklistService blacklistService,
       @Nullable VigilTenantService tenantService) {
     return new VigilAuthenticationFilter(
         tokenService,

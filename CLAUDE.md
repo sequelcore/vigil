@@ -1,130 +1,92 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code when working with this repository.
-
 ## Overview
 
-**Vigil** is an opinionated JWT authentication starter for Spring Boot. It eliminates boilerplate auth code by providing pre-configured JWT handling, password services, cookie management, and optional modules for multi-tenancy, token blacklisting, and brute-force protection.
+**Vigil** - Opinionated JWT authentication for Spring Boot. Security by default, not by configuration.
 
-## Project Information
+## Project Info
 
-- **Group ID:** io.github.sequelcore
-- **Artifact ID:** vigil-spring-boot-starter
-- **Version:** 1.0.0
-- **License:** Apache 2.0
-- **Java:** 21 LTS
-- **Spring Boot:** 3.5.x
-
-## Reference Projects
-
-These Sequel projects use patterns that Vigil extracts and standardizes:
-
-- **SHRAD:** `C:\Proyectos\Sequel\Shrad\shrad\backend`
-  - Multi-tenant JWT with `X-Tenant-ID` header
-  - Cookie-based token storage (HttpOnly)
-  - BCrypt with cost factor 12
-  - `TenantContext` ThreadLocal pattern
-
-- **Quesoro:** `C:\Proyectos\Sequel\quesoro\backend`
-  - Token blacklist with Caffeine cache
-  - Login attempt tracking and account lockout
-  - Dual client support (web cookies / mobile tokens)
+| Field | Value |
+|-------|-------|
+| Group ID | io.github.sequelcore |
+| Artifact ID | vigil-spring-boot-starter |
+| Version | 1.0.0 |
+| Java | 21 LTS |
+| Spring Boot | 3.5.x |
 
 ## Commands
 
 ```bash
-# Build
-./gradlew build
-
-# Run tests
-./gradlew test
-
-# Code quality
-./gradlew qualityCheck
-./gradlew spotlessApply
-
-# Publish to Maven Central (CI only - requires secrets)
-./gradlew publishAllPublicationsToMavenCentralRepository
+./gradlew build              # Build
+./gradlew test               # Tests
+./gradlew qualityCheck       # Spotless + Checkstyle + JaCoCo
+./gradlew spotlessApply      # Format code
 ```
 
 ## Architecture
-
-Single module with feature flags via `@ConditionalOnProperty`:
 
 ```
 src/main/java/io/github/sequelcore/vigil/
 ├── autoconfigure/     # Spring Boot auto-configuration
 ├── core/
-│   ├── jwt/           # Token generation, validation, claims
-│   ├── password/      # BCrypt hashing, strength validation
-│   └── cookie/        # Cookie creation, dual client support
-├── filter/            # JWT authentication filter
-├── blacklist/         # Token blacklist (Caffeine) - optional
-├── protection/        # Login attempt tracking - optional
-└── tenant/            # Multi-tenant context - optional
+│   ├── jwt/           # Token generation, validation
+│   ├── password/      # BCrypt hashing
+│   └── cookie/        # Cookie management
+├── filter/            # JWT auth filter
+├── blacklist/         # Token blacklist (Caffeine)
+├── protection/        # Brute-force protection
+└── tenant/            # Multi-tenant context (optional)
 ```
 
-## Configuration
+## Security Philosophy
+
+**Enabled by default** (can't accidentally deploy insecure):
+- Auth filter
+- Token blacklist (for real logout)
+- Brute-force protection
+- HttpOnly, Secure, SameSite cookies
+
+**Configurable with ceilings** (NIST/OWASP limits):
+- Access TTL: default 15m, max 60m
+- Refresh TTL: default 7d, max 30d
+- BCrypt cost: default 12, min 10
+
+**Optional** (architecture-specific):
+- Multi-tenant support
+
+## Minimal Config
 
 ```yaml
 vigil:
   jwt:
-    secret: ${JWT_SECRET}    # Required (min 32 chars)
-    access-ttl: 15m
-    refresh-ttl: 7d
+    secret: ${JWT_SECRET}
   filter:
-    enabled: true
-    public-paths:
-      - /public/**
-  blacklist:
-    enabled: false
-  tenant:
-    enabled: false
-  protection:
-    enabled: false
+    public-paths: [/auth/**, /public/**]
 ```
 
 ## Code Standards
 
-- **Formatting:** Google Java Format via Spotless
-- **Style:** Google Checkstyle rules
-- **Coverage:** 80% minimum (JaCoCo)
-- **No wildcard imports**
-- **Use Lombok:** `@Getter`, `@Builder`, `@RequiredArgsConstructor`
-- **Use Java Records** for DTOs and configuration properties
+- Google Java Format (Spotless)
+- Google Checkstyle
+- 80% coverage (JaCoCo)
+- Lombok: `@Getter`, `@Builder`, `@RequiredArgsConstructor`
+- Java Records for DTOs
+
+## Naming
+
+- Services: `Vigil{Function}Service`
+- Properties: `VigilProperties` with nested records
+- Filters: `Vigil{Purpose}Filter`
 
 ## Publishing
 
-Uses `com.vanniktech.maven.publish` plugin with Central Portal.
+Maven Central via vanniktech plugin + Central Portal.
 
-- **Registry:** Maven Central (Central Portal)
-- **Plugin:** vanniktech/gradle-maven-publish-plugin v0.30.0
-- **Secrets:** Doppler (sequel-core/prd)
-  - `MAVEN_USERNAME` - Central Portal token username
-  - `MAVEN_PASSWORD` - Central Portal token password
-  - `GPG_PRIVATE_KEY` - Signing key (armored)
-  - `GPG_PASSPHRASE` - Key passphrase
+Secrets in Doppler (`sequel-core/prd`):
+- `MAVEN_USERNAME` / `MAVEN_PASSWORD`
+- `GPG_PRIVATE_KEY` / `GPG_PASSPHRASE`
 
-CI workflow maps Doppler secrets to Gradle properties:
-- `ORG_GRADLE_PROJECT_mavenCentralUsername`
-- `ORG_GRADLE_PROJECT_mavenCentralPassword`
-- `ORG_GRADLE_PROJECT_signingInMemoryKey`
-- `ORG_GRADLE_PROJECT_signingInMemoryKeyPassword`
+## Reference Projects
 
-## Naming Conventions
-
-- **Services:** `Vigil{Function}Service`
-- **Properties:** `VigilProperties`, nested records for modules
-- **Filters:** `Vigil{Purpose}Filter`
-
-## Testing
-
-- Unit tests: 47 tests, 80%+ coverage
-- Integration tests: 12 scenarios
-- Framework: JUnit 5, AssertJ, Mockito
-
-## Git Workflow
-
-- **Main branch:** main
-- **Commit format:** Conventional Commits
-- **Releases:** Git tags (`v*`) trigger publish workflow
+- **SHRAD**: Multi-tenant JWT, cookie auth, BCrypt 12
+- **Quesoro**: Token blacklist, login protection, dual client support
