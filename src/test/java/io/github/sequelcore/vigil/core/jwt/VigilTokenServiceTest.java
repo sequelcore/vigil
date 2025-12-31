@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.sequelcore.vigil.autoconfigure.VigilProperties;
+import io.github.sequelcore.vigil.blacklist.VigilBlacklistService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
@@ -11,6 +12,7 @@ import io.jsonwebtoken.Jwts;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -20,6 +22,7 @@ class VigilTokenServiceTest {
 
   private VigilTokenService tokenService;
   private VigilProperties.Jwt jwtConfig;
+  private VigilBlacklistService blacklistService;
 
   @BeforeEach
   void setUp() {
@@ -30,7 +33,9 @@ class VigilTokenServiceTest {
             Duration.ofDays(7),
             "vigil",
             "audience");
-    tokenService = new VigilTokenService(jwtConfig);
+    blacklistService =
+        new VigilBlacklistService(new VigilProperties.Blacklist(1000, Duration.ofHours(1)));
+    tokenService = new VigilTokenService(jwtConfig, blacklistService);
   }
 
   @Test
@@ -125,5 +130,210 @@ class VigilTokenServiceTest {
         .expiration(Date.from(now.minusSeconds(60)))
         .signWith(tokenService.getSigningKey())
         .compact();
+  }
+
+  @Nested
+  @DisplayName("Custom TTL")
+  class CustomTtl {
+
+    @Test
+    @DisplayName("Access token with custom TTL")
+    void accessTokenWithCustomTtl() {
+      Instant before = Instant.now();
+
+      String token =
+          tokenService.generateAccessToken(
+              TokenRequest.builder().subject("alice").accessTtl(Duration.ofHours(24)).build());
+
+      Claims claims = tokenService.validateAndGetClaims(token);
+      Instant expiration = claims.getExpiration().toInstant();
+      assertThat(expiration).isAfter(before.plus(Duration.ofHours(23)));
+      assertThat(expiration).isBefore(before.plus(Duration.ofHours(25)));
+    }
+
+    @Test
+    @DisplayName("Refresh token with custom TTL")
+    void refreshTokenWithCustomTtl() {
+      Instant before = Instant.now();
+
+      String token =
+          tokenService.generateRefreshToken(
+              TokenRequest.builder().subject("bob").refreshTtl(Duration.ofDays(30)).build());
+
+      Claims claims = tokenService.validateAndGetClaims(token);
+      Instant expiration = claims.getExpiration().toInstant();
+      assertThat(expiration).isAfter(before.plus(Duration.ofDays(29)));
+      assertThat(expiration).isBefore(before.plus(Duration.ofDays(31)));
+    }
+  }
+
+  @Nested
+  @DisplayName("Refresh with claims")
+  class RefreshWithClaims {
+
+    @Test
+    @DisplayName("Generate refresh token with claims")
+    void generateRefreshTokenWithClaims() {
+      String token =
+          tokenService.generateRefreshToken(
+              TokenRequest.builder()
+                  .subject("carol")
+                  .claim("role", "admin")
+                  .claim("tenant", "acme")
+                  .build());
+
+      Claims claims = tokenService.validateAndGetClaims(token);
+      assertThat(claims.getSubject()).isEqualTo("carol");
+      assertThat(claims.get("type", String.class)).isEqualTo("refresh");
+      assertThat(claims.get("role", String.class)).isEqualTo("admin");
+      assertThat(claims.get("tenant", String.class)).isEqualTo("acme");
+    }
+  }
+
+  @Nested
+  @DisplayName("Token refresh rotation")
+  class TokenRefresh {
+
+    @Test
+    @DisplayName("Refresh tokens rotates old token")
+    void refreshTokensRotatesOldToken() {
+      String refreshToken = tokenService.generateRefreshToken("dave");
+
+      TokenRefreshResult result = tokenService.refreshTokens(refreshToken);
+
+      assertThat(result.accessToken()).isNotBlank();
+      assertThat(result.refreshToken()).isNotBlank();
+      // Old token is blacklisted (rotation)
+      assertThat(blacklistService.isBlacklisted(refreshToken)).isTrue();
+    }
+
+    @Test
+    @DisplayName("Refresh tokens preserves claims")
+    void refreshTokensPreservesClaims() {
+      String refreshToken =
+          tokenService.generateRefreshToken(
+              TokenRequest.builder().subject("eve").claim("role", "manager").build());
+
+      TokenRefreshResult result = tokenService.refreshTokens(refreshToken);
+
+      Claims accessClaims = tokenService.validateAndGetClaims(result.accessToken());
+      assertThat(accessClaims.getSubject()).isEqualTo("eve");
+      assertThat(accessClaims.get("role", String.class)).isEqualTo("manager");
+      assertThat(accessClaims.get("type")).isNull();
+    }
+
+    @Test
+    @DisplayName("Refresh tokens with updated claims")
+    void refreshTokensWithUpdatedClaims() {
+      String refreshToken =
+          tokenService.generateRefreshToken(
+              TokenRequest.builder().subject("frank").claim("role", "user").build());
+
+      TokenRefreshResult result =
+          tokenService.refreshTokens(refreshToken, Map.of("role", "admin", "upgraded", true));
+
+      Claims accessClaims = tokenService.validateAndGetClaims(result.accessToken());
+      assertThat(accessClaims.get("role", String.class)).isEqualTo("admin");
+      assertThat(accessClaims.get("upgraded", Boolean.class)).isTrue();
+    }
+
+    @Test
+    @DisplayName("Refresh tokens returns expiration times")
+    void refreshTokensReturnsExpirationTimes() {
+      String refreshToken = tokenService.generateRefreshToken("grace");
+      Instant before = Instant.now();
+
+      TokenRefreshResult result = tokenService.refreshTokens(refreshToken);
+
+      assertThat(result.accessExpiresAt()).isAfter(before);
+      assertThat(result.refreshExpiresAt()).isAfter(result.accessExpiresAt());
+    }
+
+    @Test
+    @DisplayName("Refresh with access token throws")
+    void refreshWithAccessTokenThrows() {
+      String accessToken =
+          tokenService.generateAccessToken(TokenRequest.builder().subject("hank").build());
+
+      assertThatThrownBy(() -> tokenService.refreshTokens(accessToken))
+          .isInstanceOf(JwtException.class)
+          .hasMessageContaining("not a refresh token");
+    }
+
+    @Test
+    @DisplayName("Refresh with invalid token throws")
+    void refreshWithInvalidTokenThrows() {
+      assertThatThrownBy(() -> tokenService.refreshTokens("invalid.token.here"))
+          .isInstanceOf(JwtException.class);
+    }
+  }
+
+  @Nested
+  @DisplayName("Without blacklist service")
+  class WithoutBlacklist {
+
+    @Test
+    @DisplayName("Refresh tokens works without blacklist")
+    void refreshTokensWithoutBlacklist() {
+      VigilTokenService serviceWithoutBlacklist = new VigilTokenService(jwtConfig);
+      String refreshToken = serviceWithoutBlacklist.generateRefreshToken("ivan");
+
+      TokenRefreshResult result = serviceWithoutBlacklist.refreshTokens(refreshToken);
+
+      assertThat(result.accessToken()).isNotBlank();
+      assertThat(result.refreshToken()).isNotBlank();
+    }
+  }
+
+  @Nested
+  @DisplayName("Expiration helpers")
+  class ExpirationHelpers {
+
+    @Test
+    @DisplayName("Get access token expiration")
+    void getAccessTokenExpiration() {
+      Instant before = Instant.now();
+
+      Instant expiration = tokenService.getAccessTokenExpiration();
+
+      assertThat(expiration).isAfter(before.plus(Duration.ofMinutes(14)));
+      assertThat(expiration).isBefore(before.plus(Duration.ofMinutes(16)));
+    }
+
+    @Test
+    @DisplayName("Get refresh token expiration")
+    void getRefreshTokenExpiration() {
+      Instant before = Instant.now();
+
+      Instant expiration = tokenService.getRefreshTokenExpiration();
+
+      assertThat(expiration).isAfter(before.plus(Duration.ofDays(6)));
+      assertThat(expiration).isBefore(before.plus(Duration.ofDays(8)));
+    }
+  }
+
+  @Nested
+  @DisplayName("No issuer or audience")
+  class NoIssuerOrAudience {
+
+    @Test
+    @DisplayName("Token without issuer or audience")
+    void tokenWithoutIssuerOrAudience() {
+      VigilProperties.Jwt minimalConfig =
+          new VigilProperties.Jwt(
+              "01234567890123456789012345678901",
+              Duration.ofMinutes(15),
+              Duration.ofDays(7),
+              null,
+              null);
+      VigilTokenService minimalService = new VigilTokenService(minimalConfig);
+
+      String token =
+          minimalService.generateAccessToken(TokenRequest.builder().subject("jake").build());
+
+      Claims claims = minimalService.validateAndGetClaims(token);
+      assertThat(claims.getIssuer()).isNull();
+      assertThat(claims.getAudience()).isNullOrEmpty();
+    }
   }
 }

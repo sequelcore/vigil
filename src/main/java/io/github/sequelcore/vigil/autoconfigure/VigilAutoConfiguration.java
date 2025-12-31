@@ -31,12 +31,14 @@ public class VigilAutoConfiguration {
    * Creates the token service used to generate and validate JWTs.
    *
    * @param properties the loaded Vigil properties
+   * @param blacklistService the blacklist service for token rotation
    * @return configured token service
    */
   @Bean
   @ConditionalOnMissingBean
-  public VigilTokenService vigilTokenService(VigilProperties properties) {
-    return new VigilTokenService(properties.jwt());
+  public VigilTokenService vigilTokenService(
+      VigilProperties properties, VigilBlacklistService blacklistService) {
+    return new VigilTokenService(properties.jwt(), blacklistService);
   }
 
   /**

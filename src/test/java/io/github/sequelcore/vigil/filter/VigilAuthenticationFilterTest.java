@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,7 +54,12 @@ class VigilAuthenticationFilterTest {
     MockitoAnnotations.openMocks(this);
     jwtConfig =
         new VigilProperties.Jwt(SECRET, Duration.ofMinutes(15), Duration.ofDays(7), null, null);
-    cookieConfig = new VigilProperties.Cookie("access_token", "refresh_token", true, "Lax", true);
+    cookieConfig =
+        new VigilProperties.Cookie(
+            true,
+            "Lax",
+            true,
+            Map.of("default", new VigilProperties.CookieProfile("access_token", "refresh_token")));
     tokenService = new VigilTokenService(jwtConfig);
     cookieService = new VigilCookieService(cookieConfig, jwtConfig);
   }

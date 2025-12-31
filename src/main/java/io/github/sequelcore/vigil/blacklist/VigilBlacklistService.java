@@ -1,25 +1,25 @@
 package io.github.sequelcore.vigil.blacklist;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import io.github.sequelcore.vigil.autoconfigure.VigilProperties;
 
-/** Service for managing token blacklist using Caffeine cache. */
+/**
+ * Service for managing token blacklist.
+ *
+ * <p>Delegates to a {@link VigilBlacklistBackend} implementation. Default is {@link
+ * CaffeineBlacklistBackend} (in-memory).
+ */
 public class VigilBlacklistService {
 
-  private final Cache<String, Boolean> blacklist;
+  private final VigilBlacklistBackend backend;
 
-  /**
-   * Creates a blacklist service backed by Caffeine.
-   *
-   * @param blacklistConfig blacklist configuration properties
-   */
-  public VigilBlacklistService(VigilProperties.Blacklist blacklistConfig) {
-    this.blacklist =
-        Caffeine.newBuilder()
-            .maximumSize(blacklistConfig.maxSize())
-            .expireAfterWrite(blacklistConfig.ttl())
-            .build();
+  /** Creates with Caffeine backend (default). */
+  public VigilBlacklistService(VigilProperties.Blacklist config) {
+    this.backend = new CaffeineBlacklistBackend(config);
+  }
+
+  /** Creates with custom backend. */
+  public VigilBlacklistService(VigilBlacklistBackend backend) {
+    this.backend = backend;
   }
 
   /**
@@ -28,35 +28,30 @@ public class VigilBlacklistService {
    * @param token the token to blacklist
    */
   public void blacklist(String token) {
-    if (token != null && !token.isEmpty()) {
-      blacklist.put(token, Boolean.TRUE);
-    }
+    backend.blacklist(token);
   }
 
   /**
    * Checks if a token is blacklisted.
    *
    * @param token the token to check
-   * @return true if the token is blacklisted
+   * @return true if blacklisted
    */
   public boolean isBlacklisted(String token) {
-    if (token == null || token.isEmpty()) {
-      return false;
-    }
-    return blacklist.getIfPresent(token) != null;
+    return backend.isBlacklisted(token);
+  }
+
+  /** Clears all entries. */
+  public void clear() {
+    backend.clear();
   }
 
   /**
-   * Returns the current size of the blacklist.
+   * Returns approximate size.
    *
-   * @return the number of blacklisted tokens
+   * @return number of entries
    */
   public long size() {
-    return blacklist.estimatedSize();
-  }
-
-  /** Clears all entries from the blacklist. */
-  public void clear() {
-    blacklist.invalidateAll();
+    return backend.size();
   }
 }

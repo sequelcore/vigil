@@ -1,282 +1,233 @@
 # Vigil Roadmap
 
-## Phase 1: Core Foundation (v1.0.0) - Released
+## Phase 1: Core Foundation (v1.0.x) - Released
 
-### 1.1 Project Setup
-- [x] Initialize project structure
-- [x] Configure Gradle build with Kotlin DSL
-- [x] Set up Spotless, Checkstyle, JaCoCo
-- [x] Configure Maven Central publishing (vanniktech plugin + Central Portal)
-- [x] Set up GitHub Actions CI/CD
-  - CI workflow (build, test, quality checks on push/PR)
-  - Publish workflow (Maven Central publishing on tags)
-  - Doppler integration for secret management
-
-### 1.2 Core Module
+### v1.0.0 - Initial Release
 - [x] `VigilTokenService` - JWT generation and validation
 - [x] `VigilPasswordService` - Password hashing and validation
 - [x] `VigilCookieService` - Cookie management
-
-### 1.3 Security Filter
-- [x] `VigilAuthenticationFilter` - Base JWT filter
+- [x] `VigilAuthenticationFilter` - Base JWT filter with extension hooks
 - [x] `VigilTokenClaims` - Type-safe JWT claims wrapper
+- [x] `VigilBlacklistService` - Token blacklist (Caffeine)
+- [x] `VigilProtectionService` - Brute-force prevention
+- [x] `VigilTenantService` - Multi-tenant support (optional)
+- [x] Auto-configuration with `@ConditionalOnMissingBean`
+- [x] 80% test coverage
 
-### 1.4 Auto-Configuration
-- [x] `VigilAutoConfiguration` - Spring Boot auto-config
-- [x] `VigilProperties` - Configuration properties with validation
-- [x] Conditional bean creation based on properties
+### v1.0.1 - API Cleanup
+- [x] Removed `enabled` flags from Blacklist/Protection/Filter records
+- [x] Updated maven.publish plugin to 0.34.0
 
-### 1.5 Security Modules (enabled by default)
-- [x] Token Blacklist - real logout support
-- [x] Login Protection - brute-force prevention
-- [x] Multi-Tenant Support (optional, `vigil.tenant.enabled`)
-
-### 1.6 Testing and Documentation
-- [x] Unit tests (80% coverage, 47 tests)
-- [x] Integration tests (12 scenarios)
-- [x] README with quick start guide
-- [x] Javadoc for public APIs
+### v1.0.2 - Cookie API Enhancement
+- [x] Added public `setCookie(response, name, value, maxAge)` method
+- [x] Added public `deleteCookie(response, name)` method
 
 ---
 
-## Phase 2: Security Hardening (v1.1.0) - Planned
+## Phase 2: Integration Ready (v2.0.0) - In Progress
 
-> **Research:** [docs/SECURITY_RESEARCH.md](docs/SECURITY_RESEARCH.md)
-> **Standards:** OWASP JWT Cheat Sheet 2025, NIST SP 800-63-4 (July 2025)
+> **Goal:** Make Vigil practical for multi-user-type applications (staff + customers).
+> **Breaking Changes:** Yes. Only SHRAD partially integrated, safe to break.
 
-### 2.1 Native Token Rotation (Non-Configurable)
+### 2.1 Cookie Profiles
+Multiple named cookie configurations for different user types.
 
-> "Refresh token rotation ensures compromised tokens lose utility almost immediately." — [Auth0](https://auth0.com/docs/secure/tokens/refresh-tokens/refresh-token-rotation)
-
-- [ ] One-time use refresh tokens (rotate on every refresh)
-- [ ] Token family tracking (associate all tokens from same login)
-- [ ] Reuse detection → invalidate entire family + force re-auth
-- [ ] `VigilTokenRotationService` with atomic operations
-- [ ] Caffeine storage (default), Redis adapter (optional)
-
-**Why native?** Auth0 and Okta make this optional. We don't. Token reuse is an attack indicator—making it configurable allows insecure deployments.
-
-### 2.2 Algorithm Security (Native)
-
-Prevents CVEs: CVE-2024-54150, CVE-2024-37568, CVE-2023-48223, CVE-2015-9235
-
-- [ ] Reject `alg: none` tokens (verify current implementation)
-- [ ] Server-side algorithm enforcement (never trust JWT header)
-- [ ] Block key confusion attacks (symmetric key used as asymmetric)
-- [ ] Whitelist: HS256, HS384, HS512 (v1.x), RS256, ES256, EdDSA (v2.x)
-
-```java
-// WRONG: Trust the token header
-String alg = jwt.getHeader().getAlgorithm();
-
-// CORRECT: Server decides algorithm
-.setSigningKey(key)
-.requireSignedWith(SignatureAlgorithm.HS256)
+```yaml
+vigil:
+  cookie:
+    secure: true
+    http-only: true
+    same-site: Lax
+    profiles:
+      staff:
+        access-token-name: staff_access_token
+        refresh-token-name: staff_refresh_token
+      customer:
+        access-token-name: customer_access_token
+        refresh-token-name: customer_refresh_token
 ```
 
-### 2.3 Claims Validation (Native)
+```java
+// API
+cookieService.setAccessTokenCookie(response, token);           // Uses first profile
+cookieService.setAccessTokenCookie(response, token, "staff");  // Uses "staff" profile
+cookieService.getAccessToken(request, "customer");             // Reads from "customer" profile
+```
 
-Per [OWASP JWT Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html):
+- [ ] `CookieProfile` record with name pair
+- [ ] `VigilProperties.Cookie.profiles` map
+- [ ] Profile-aware methods in `VigilCookieService`
+- [ ] Backward compatible: no profile = first/default profile
 
-- [ ] `iss` (issuer) - must match `vigil.jwt.issuer`
-- [ ] `aud` (audience) - must include `vigil.jwt.audience`
-- [ ] `exp` (expiration) - ✅ already implemented
-- [ ] `nbf` (not before) - clock skew tolerance (30s default)
-- [ ] `iat` (issued at) - reject tokens from the future
+### 2.2 Token Refresh with Rotation
+Secure token refresh with one-time-use refresh tokens.
 
-### 2.4 Token Sidejacking Prevention (OWASP)
+```java
+public record TokenRefreshResult(
+    String accessToken,
+    String refreshToken,      // New rotated token
+    Instant accessExpiresAt,
+    Instant refreshExpiresAt
+)
 
-> "A SHA256 hash of a random string stored in the token, with the raw value in an HttpOnly cookie, prevents token reuse by attackers." — OWASP
+// VigilTokenService
+TokenRefreshResult refreshTokens(String refreshToken);
+TokenRefreshResult refreshTokens(String refreshToken, Map<String, Object> updatedClaims);
+```
 
-- [ ] Generate fingerprint on login (random 32-byte string)
-- [ ] Store SHA256(fingerprint) in JWT `fgp` claim
-- [ ] Send fingerprint in `__Secure-Fgp` cookie (HttpOnly, Secure, SameSite=Strict)
-- [ ] Validate: SHA256(cookie) === JWT claim on each request
-- [ ] Optional feature (performance tradeoff for high-security apps)
+- [ ] Validate refresh token type (`type: "refresh"` claim)
+- [ ] Blacklist old refresh token immediately (strict rotation)
+- [ ] Generate new access + refresh token pair
+- [ ] Preserve original claims, allow updates
+- [ ] Return both tokens with expiration times
 
-### 2.5 TTL Ceiling Enforcement
+### 2.3 Custom TTL per Token
+Override default TTL for specific tokens (email verification, password reset).
 
-Per [NIST SP 800-63-4](https://csrc.nist.gov/pubs/sp/800/63/4/final) AAL2:
+```java
+TokenRequest.builder()
+    .subject("user@example.com")
+    .claim("purpose", "email-verification")
+    .accessTtl(Duration.ofHours(24))  // Override
+    .build();
+```
 
-- [ ] Access TTL: max 60 minutes (even if configured higher)
-- [ ] Refresh TTL: max 30 days
-- [ ] Inactivity timeout: max 30 minutes
-- [ ] Validation at startup (fail fast on invalid config)
+- [ ] `accessTtl` field in `TokenRequest`
+- [ ] `refreshTtl` field in `TokenRequest`
+- [ ] Null = use config default
 
-### 2.6 Key ID Support
+### 2.4 Blacklist Backend Interface
+Prepare for distributed deployments without implementing Redis.
 
-Preparation for key rotation in v2.0.0:
+```java
+public interface VigilBlacklistBackend {
+    void blacklist(String token, Duration ttl);
+    boolean isBlacklisted(String token);
+    void clear();
+}
 
-- [ ] Add `kid` (key ID) to JWT header
-- [ ] `vigil.jwt.key-id` configuration property
-- [ ] Support multiple keys during rotation grace period
+// Default implementation
+public class CaffeineBlacklistBackend implements VigilBlacklistBackend { ... }
+```
 
----
+- [ ] Extract interface from current `VigilBlacklistService`
+- [ ] `CaffeineBlacklistBackend` as default
+- [ ] `VigilBlacklistService` delegates to backend
+- [ ] Document: "Implement interface for Redis/database"
 
-## Phase 3: Advanced Features (v1.2.0) - Planned
+### 2.5 Test Configuration
+Reduce test boilerplate for consumers.
 
-> **Spec:** [docs/IP_DEVICE_SPEC.md](docs/IP_DEVICE_SPEC.md)
-> **Architecture:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+```java
+@TestConfiguration
+public class VigilTestConfiguration {
+    @Bean public VigilTokenService vigilTokenService() { ... }
+    @Bean public VigilCookieService vigilCookieService() { ... }
+    @Bean public VigilBlacklistService vigilBlacklistService() { ... }
+    @Bean public VigilProtectionService vigilProtectionService() { ... }
+    @Bean public VigilPasswordService vigilPasswordService() { ... }
+    // All with test-friendly defaults (test secret, short TTLs)
+}
+```
 
-### 3.1 IP & Device Security
+- [ ] `VigilTestConfiguration` class
+- [ ] Test JWT secret (deterministic for assertions)
+- [ ] Short TTLs for fast tests
+- [ ] Document usage: `@Import(VigilTestConfiguration.class)`
 
-#### IP Protection (Native)
-- [ ] IP logging in session metadata (audit trail)
-- [ ] IP change detection mid-session
-- [ ] Impossible travel detection (geolocation jumps)
-- [ ] `VigilIpService` - IP extraction, validation, geolocation
-
-#### Device Tracking (Optional)
-- [ ] Device fingerprinting (User-Agent, headers)
-- [ ] Device ID generation and storage
-- [ ] Trusted device management
-- [ ] New device detection + alerts
-- [ ] `VigilDeviceService` - fingerprinting, trust management
-
-#### Anomaly Detection (Native)
-- [ ] IP + Device change within 5 min → force re-auth
-- [ ] Geolocation jump >500km/h → auto-logout
-- [ ] Multiple IPs same session → suspicious flag
-- [ ] `VigilAnomalyService` - detection rules engine
-
-### 3.2 Session Management
-
-- [ ] Session ID (`sid`) claim in tokens
-- [ ] Session metadata: `ip`, `deviceId`, `location`, `userAgent`
-- [ ] Per-session revocation API
-- [ ] Concurrent session limits (per user/device)
-- [ ] `VigilSessionService` - session lifecycle management
-
-### 3.3 Argon2id Password Hashing
-
-- [ ] `VigilArgon2Service` (19 MiB memory, 2 iterations, 1 parallelism)
-- [ ] `vigil.password.algorithm` config (argon2id | bcrypt)
-- [ ] Automatic migration: re-hash on login if BCrypt detected
-
-### 3.4 Observability
-
-- [ ] Micrometer metrics for auth events
-- [ ] Counters: `vigil.auth.login.success`, `vigil.auth.login.failure`
-- [ ] Counters: `vigil.anomaly.detected`, `vigil.device.new`
-- [ ] Timers: `vigil.token.generation.time`, `vigil.token.validation.time`
-- [ ] Security event logging (anomaly detected, device added, lockout)
-
-### 3.5 Redis Adapters
-
-- [ ] Redis-based token blacklist
-- [ ] Redis-based session storage
-- [ ] Redis-based device registry
-- [ ] Auto-detected via Spring Data Redis
-
----
-
-## Phase 4: Extended Integrations (v2.0.0) - Future
-
-### 4.1 Full Key Rotation with JWKS
-
-> "A robust key rotation process: generate new key, publish to JWKS, grace period, switch signing, retire old key." — [Zalando Engineering](https://engineering.zalando.com/posts/2025/01/automated-json-web-key-rotation.html)
-
-- [ ] `VigilKeyRotationService` - automated key lifecycle
-- [ ] JWKS endpoint (`/.well-known/jwks.json`)
-- [ ] Grace period configuration (default: 24h)
-- [ ] Old key removal after max token lifetime + buffer
-- [ ] HSM/KMS integration (AWS KMS, Azure Key Vault, HashiCorp Vault)
-
-### 4.2 Asymmetric Key Support
-
-> "In 2025: EdDSA (newest, quantum-resistant properties), ES256 (ECDSA P-256), RS256 (widely supported), PS256 (more secure than RS256)." — Industry consensus
-
-- [ ] RS256 (RSA 2048-bit minimum)
-- [ ] ES256 (ECDSA with P-256 curve)
-- [ ] EdDSA (Ed25519) - recommended for new projects
-- [ ] PS256 (RSA-PSS) for high-security requirements
-
-### 4.3 Event Hooks
-- [ ] `onLoginSuccess` callback
-- [ ] `onLoginFailure` callback
-- [ ] `onTokenRefresh` callback
-- [ ] `onTokenReuseDetected` callback (security alert)
-- [ ] `onAccountLocked` callback
-
-### 4.4 Simplified OAuth Wrappers
-- [ ] Google OAuth simplified configuration
-- [ ] GitHub OAuth simplified configuration
-- [ ] Microsoft Entra ID support
+### 2.6 API Cleanup
+- [ ] Rename `VigilTokenClaims.isRefreshToken()` to `isRefresh()`
+- [ ] Add `VigilTokenService.generateAccessToken(String subject, VigilClaims claims)`
+- [ ] Deprecate raw `Map<String, Object>` claims methods
+- [ ] Remove any unused internal methods
 
 ---
 
-## Native vs Configurable Philosophy
+## Phase 3: Security Hardening (v2.1.0) - Planned
 
-Vigil follows an **opinionated security-first** approach. While Auth0/Okta let you disable security features, we don't—you can't accidentally deploy an insecure configuration.
+> **Goal:** OWASP/NIST compliance for production deployments.
 
-### Native (Non-Configurable) - Security Invariants
+### 3.1 Algorithm Enforcement
+- [ ] Reject `alg: none` tokens
+- [ ] Server-side algorithm enforcement (never trust JWT header)
+- [ ] Whitelist: HS256, HS384, HS512
 
-These are **always enforced** because disabling them creates vulnerabilities:
+### 3.2 Claims Validation
+- [ ] `iss` (issuer) validation against config
+- [ ] `aud` (audience) validation against config
+- [ ] `nbf` (not before) with clock skew tolerance
+- [ ] `iat` (issued at) - reject future tokens
 
-| Feature | CVE/Standard | Rationale |
-|---------|--------------|-----------|
-| Auth filter | Core architecture | JWT validation on every request |
-| Token blacklist | Auth0/Okta best practice | Real logout requires invalidation |
-| Brute-force protection | OWASP Authentication | Credential stuffing defense |
-| Refresh token rotation (v1.1) | Auth0/Okta best practice | Token reuse = theft indicator |
-| Token reuse detection (v1.1) | Auth0/Okta best practice | Attack early warning |
-| Algorithm `none` rejection | CVE-2015-9235 | Critical bypass vulnerability |
-| Algorithm enforcement (v1.1) | CVE-2024-54150, CVE-2024-37568 | Key confusion attacks |
-| Claims validation (v1.1) | OWASP JWT Cheat Sheet | Basic JWT security |
-| IP logging (v1.2) | NIST SP 800-63-4 | Audit trail, forensics |
-| IP change detection (v1.2) | OWASP Session | Session hijacking defense |
-| Anomaly detection (v1.2) | Auth0/Okta | Impossible travel, suspicious activity |
-| HttpOnly cookies | MDN Security Guide | XSS protection |
-| Secure flag in production | MDN Security Guide | MITM protection |
-| SameSite cookie attribute | MDN Security Guide | CSRF protection |
-| BCrypt minimum cost (10) | OWASP Password Storage | Brute-force resistance |
-| TTL ceilings | NIST SP 800-63-4 | Session management |
+### 3.3 TTL Ceilings
+- [ ] Access TTL max: 60 minutes
+- [ ] Refresh TTL max: 30 days
+- [ ] Fail-fast validation at startup
 
-### Configurable with Enforced Ceilings
+### 3.4 Audit Events
+```java
+public class VigilAuthenticationSuccessEvent extends ApplicationEvent { ... }
+public class VigilAuthenticationFailureEvent extends ApplicationEvent { ... }
+public class VigilTokenBlacklistedEvent extends ApplicationEvent { ... }
+public class VigilAccountLockedEvent extends ApplicationEvent { ... }
+```
 
-These have **sensible defaults** with **maximum limits** that cannot be exceeded:
+- [ ] Spring ApplicationEvent publishing
+- [ ] Events from filter and services
+- [ ] Document listener patterns
 
-| Feature | Default | Max Allowed | Standard |
-|---------|---------|-------------|----------|
-| Access token TTL | 15 min | 60 min | OWASP |
-| Refresh token TTL | 7 days | 30 days | NIST AAL2 |
-| Inactivity timeout | 30 min | 30 min | NIST AAL2 |
-| BCrypt cost factor | 12 | 31 | OWASP |
-| Login attempts | 5 | 10 | Industry practice |
-| Clock skew tolerance | 30s | 60s | OWASP |
+---
 
-### Fully Configurable - Application-Specific
+## Phase 4: Advanced Security (v2.2.0) - Future
 
-These depend on the application's requirements:
+### 4.1 Token Sidejacking Prevention
+- [ ] Fingerprint in HttpOnly cookie
+- [ ] SHA256(fingerprint) in JWT claim
+- [ ] Validate on every request
 
-| Feature | Default | Why Configurable |
-|---------|---------|------------------|
-| Public paths | `[]` | Varies per API design |
-| Multi-tenant | Off | Architecture decision |
-| Device tracking (v1.2) | Off | Privacy/UX tradeoff |
-| Trusted devices (v1.2) | Off | UX tradeoff |
-| Cookie names | `vigil_*` | Integration requirements |
-| Issuer/Audience | app name | Deployment-specific |
-| Storage backend | Caffeine | Infrastructure varies |
+### 4.2 Key Rotation
+- [ ] `kid` (key ID) in JWT header
+- [ ] Multiple keys during rotation
+- [ ] JWKS endpoint
 
+### 4.3 Asymmetric Keys
+- [ ] RS256, ES256, EdDSA support
+- [ ] Public key validation mode
+
+### 4.4 Redis Adapters
+- [ ] `RedisBlacklistBackend`
+- [ ] `RedisProtectionBackend`
+- [ ] Auto-detect via Spring Data Redis
+
+---
+
+## Phase 5: Extended Features (v3.0.0) - Future
+
+- [ ] IP/Device tracking
+- [ ] Anomaly detection
+- [ ] Session management
+- [ ] Argon2id password hashing
+- [ ] OAuth wrappers
 
 ---
 
 ## Non-Goals
 
-- **Guest sessions** - Application-specific business logic
-- **Email verification** - Too many variables (provider, templates)
-- **Full OAuth2 server** - Use Spring Authorization Server
-- **SMS/2FA** - Provider-specific, consider for v3+
-- **User management** - Application's domain, not auth infrastructure
+- Guest sessions (application logic)
+- Email verification (provider-specific)
+- Full OAuth2 server (use Spring Authorization Server)
+- SMS/2FA (provider-specific)
+- User management (application domain)
 
 ---
 
 ## Version History
 
-| Version | Status | Description |
-|---------|--------|-------------|
-| 1.0.0 | Released | Core JWT, password, cookies with native filter, blacklist, and brute-force protection |
-| 1.1.0 | Planned | Native token rotation, algorithm enforcement, claims validation, sidejacking prevention |
-| 1.2.0 | Planned | IP/device security, session management, anomaly detection, Argon2id, observability, Redis |
-| 2.0.0 | Future | Key rotation, JWKS, asymmetric keys, OAuth wrappers, event hooks |
+| Version | Status | Highlights |
+|---------|--------|------------|
+| 1.0.0 | Released | Core JWT, cookies, blacklist, protection, tenant |
+| 1.0.1 | Released | API cleanup, removed enabled flags |
+| 1.0.2 | Released | Public setCookie/deleteCookie methods |
+| 2.0.0 | In Progress | Cookie profiles, token refresh rotation, custom TTL, test config |
+| 2.1.0 | Planned | OWASP compliance, audit events |
+| 2.2.0 | Future | Sidejacking prevention, key rotation, asymmetric keys |
+| 3.0.0 | Future | IP/device security, anomaly detection |

@@ -7,84 +7,133 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.util.Arrays;
 import java.util.Optional;
 
-/** Service for managing authentication cookies. */
+/**
+ * Service for managing authentication cookies with profile support.
+ *
+ * <p>Profiles allow different cookie names for different user types (staff, customer, etc.).
+ */
 public class VigilCookieService {
 
   private final VigilProperties.Cookie cookieConfig;
   private final VigilProperties.Jwt jwtConfig;
 
-  /**
-   * Creates a cookie service using the provided configuration.
-   *
-   * @param cookieConfig cookie configuration properties
-   * @param jwtConfig JWT configuration properties
-   */
   public VigilCookieService(VigilProperties.Cookie cookieConfig, VigilProperties.Jwt jwtConfig) {
     this.cookieConfig = cookieConfig;
     this.jwtConfig = jwtConfig;
   }
 
+  // ==========================================================================
+  // Profile-based methods
+  // ==========================================================================
+
   /**
-   * Sets the access token cookie on the response.
+   * Sets the access token cookie for a specific profile.
    *
-   * @param response the HTTP response
-   * @param token the access token
+   * @param response HTTP response
+   * @param token access token
+   * @param profile profile name (e.g., "staff", "customer")
    */
+  public void setAccessTokenCookie(HttpServletResponse response, String token, String profile) {
+    var p = cookieConfig.getProfile(profile);
+    setSecureCookie(response, p.accessTokenName(), token, (int) jwtConfig.accessTtl().toSeconds());
+  }
+
+  /**
+   * Sets the refresh token cookie for a specific profile.
+   *
+   * @param response HTTP response
+   * @param token refresh token
+   * @param profile profile name
+   */
+  public void setRefreshTokenCookie(HttpServletResponse response, String token, String profile) {
+    var p = cookieConfig.getProfile(profile);
+    setSecureCookie(
+        response, p.refreshTokenName(), token, (int) jwtConfig.refreshTtl().toSeconds());
+  }
+
+  /**
+   * Clears all cookies for a specific profile.
+   *
+   * @param response HTTP response
+   * @param profile profile name
+   */
+  public void clearCookies(HttpServletResponse response, String profile) {
+    var p = cookieConfig.getProfile(profile);
+    setSecureCookie(response, p.accessTokenName(), "", 0);
+    setSecureCookie(response, p.refreshTokenName(), "", 0);
+  }
+
+  /**
+   * Gets the access token from a specific profile's cookie.
+   *
+   * @param request HTTP request
+   * @param profile profile name
+   * @return access token if present
+   */
+  public Optional<String> getAccessToken(HttpServletRequest request, String profile) {
+    var p = cookieConfig.getProfile(profile);
+    return getCookieValue(request, p.accessTokenName());
+  }
+
+  /**
+   * Gets the refresh token from a specific profile's cookie.
+   *
+   * @param request HTTP request
+   * @param profile profile name
+   * @return refresh token if present
+   */
+  public Optional<String> getRefreshToken(HttpServletRequest request, String profile) {
+    var p = cookieConfig.getProfile(profile);
+    return getCookieValue(request, p.refreshTokenName());
+  }
+
+  // ==========================================================================
+  // Default profile methods (uses first configured profile)
+  // ==========================================================================
+
+  /** Sets access token cookie using default profile. */
   public void setAccessTokenCookie(HttpServletResponse response, String token) {
-    setSecureCookie(
-        response, cookieConfig.accessTokenName(), token, (int) jwtConfig.accessTtl().toSeconds());
+    var p = cookieConfig.getDefaultProfile();
+    setSecureCookie(response, p.accessTokenName(), token, (int) jwtConfig.accessTtl().toSeconds());
   }
 
-  /**
-   * Sets the refresh token cookie on the response.
-   *
-   * @param response the HTTP response
-   * @param token the refresh token
-   */
+  /** Sets refresh token cookie using default profile. */
   public void setRefreshTokenCookie(HttpServletResponse response, String token) {
+    var p = cookieConfig.getDefaultProfile();
     setSecureCookie(
-        response, cookieConfig.refreshTokenName(), token, (int) jwtConfig.refreshTtl().toSeconds());
+        response, p.refreshTokenName(), token, (int) jwtConfig.refreshTtl().toSeconds());
   }
 
-  /**
-   * Clears all authentication cookies (access and refresh tokens).
-   *
-   * @param response the HTTP response
-   */
+  /** Clears cookies using default profile. */
   public void clearCookies(HttpServletResponse response) {
-    setSecureCookie(response, cookieConfig.accessTokenName(), "", 0);
-    setSecureCookie(response, cookieConfig.refreshTokenName(), "", 0);
+    var p = cookieConfig.getDefaultProfile();
+    setSecureCookie(response, p.accessTokenName(), "", 0);
+    setSecureCookie(response, p.refreshTokenName(), "", 0);
   }
 
-  /**
-   * Extracts the access token from request cookies.
-   *
-   * @param request the HTTP request
-   * @return the access token if present
-   */
+  /** Gets access token using default profile. */
   public Optional<String> getAccessToken(HttpServletRequest request) {
-    return getCookieValue(request, cookieConfig.accessTokenName());
+    var p = cookieConfig.getDefaultProfile();
+    return getCookieValue(request, p.accessTokenName());
   }
 
-  /**
-   * Extracts the refresh token from request cookies.
-   *
-   * @param request the HTTP request
-   * @return the refresh token if present
-   */
+  /** Gets refresh token using default profile. */
   public Optional<String> getRefreshToken(HttpServletRequest request) {
-    return getCookieValue(request, cookieConfig.refreshTokenName());
+    var p = cookieConfig.getDefaultProfile();
+    return getCookieValue(request, p.refreshTokenName());
   }
 
+  // ==========================================================================
+  // Custom cookie methods
+  // ==========================================================================
+
   /**
-   * Sets a custom named cookie on the response.
+   * Sets a custom cookie with security settings.
    *
-   * <p>Uses the same security settings (HttpOnly, Secure, SameSite) as configured for auth cookies.
-   *
-   * @param response the HTTP response
-   * @param name the cookie name
-   * @param value the cookie value
-   * @param maxAgeSeconds the max age in seconds
+   * @param response HTTP response
+   * @param name cookie name
+   * @param value cookie value
+   * @param maxAgeSeconds max age in seconds
    */
   public void setCookie(
       HttpServletResponse response, String name, String value, int maxAgeSeconds) {
@@ -92,14 +141,18 @@ public class VigilCookieService {
   }
 
   /**
-   * Deletes a specific cookie by name.
+   * Deletes a cookie by name.
    *
-   * @param response the HTTP response
-   * @param name the cookie name to delete
+   * @param response HTTP response
+   * @param name cookie name
    */
   public void deleteCookie(HttpServletResponse response, String name) {
     setSecureCookie(response, name, "", 0);
   }
+
+  // ==========================================================================
+  // Internal
+  // ==========================================================================
 
   private void setSecureCookie(
       HttpServletResponse response, String name, String value, int maxAge) {
@@ -111,11 +164,9 @@ public class VigilCookieService {
     if (cookieConfig.httpOnly()) {
       cookie.append("; HttpOnly");
     }
-
     if (cookieConfig.secure()) {
       cookie.append("; Secure");
     }
-
     cookie.append("; SameSite=").append(cookieConfig.sameSite());
 
     response.addHeader("Set-Cookie", cookie.toString());
@@ -126,7 +177,6 @@ public class VigilCookieService {
     if (cookies == null) {
       return Optional.empty();
     }
-
     return Arrays.stream(cookies)
         .filter(c -> name.equals(c.getName()))
         .map(Cookie::getValue)

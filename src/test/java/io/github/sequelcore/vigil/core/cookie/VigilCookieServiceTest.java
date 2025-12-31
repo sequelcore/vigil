@@ -12,6 +12,7 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -31,7 +32,11 @@ class VigilCookieServiceTest {
   void setUp() {
     MockitoAnnotations.openMocks(this);
     var cookieConfig =
-        new VigilProperties.Cookie("access_token", "refresh_token", true, "Lax", true);
+        new VigilProperties.Cookie(
+            true,
+            "Lax",
+            true,
+            Map.of("default", new VigilProperties.CookieProfile("access_token", "refresh_token")));
     var jwtConfig =
         new VigilProperties.Jwt(
             "01234567890123456789012345678901",
@@ -102,5 +107,150 @@ class VigilCookieServiceTest {
     when(request.getCookies()).thenReturn(null);
 
     assertThat(cookieService.getRefreshToken(request)).isEmpty();
+  }
+
+  @Test
+  @DisplayName("Set access token with profile")
+  void setAccessTokenWithProfile() {
+    ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+
+    cookieService.setAccessTokenCookie(response, "token123", "default");
+
+    verify(response).addHeader(eq("Set-Cookie"), captor.capture());
+    assertThat(captor.getValue())
+        .isEqualTo("access_token=token123; Max-Age=900; Path=/; HttpOnly; Secure; SameSite=Lax");
+  }
+
+  @Test
+  @DisplayName("Set refresh token with profile")
+  void setRefreshTokenWithProfile() {
+    ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+
+    cookieService.setRefreshTokenCookie(response, "refresh123", "default");
+
+    verify(response).addHeader(eq("Set-Cookie"), captor.capture());
+    assertThat(captor.getValue())
+        .isEqualTo(
+            "refresh_token=refresh123; Max-Age=604800; Path=/; HttpOnly; Secure; SameSite=Lax");
+  }
+
+  @Test
+  @DisplayName("Clear cookies with profile")
+  void clearCookiesWithProfile() {
+    ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+
+    cookieService.clearCookies(response, "default");
+
+    verify(response, times(2)).addHeader(eq("Set-Cookie"), captor.capture());
+    assertThat(captor.getAllValues())
+        .containsExactly(
+            "access_token=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax",
+            "refresh_token=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax");
+  }
+
+  @Test
+  @DisplayName("Get access token with profile")
+  void getAccessTokenWithProfile() {
+    when(request.getCookies())
+        .thenReturn(
+            new Cookie[] {new Cookie("access_token", "token123"), new Cookie("other", "x")});
+
+    Optional<String> token = cookieService.getAccessToken(request, "default");
+
+    assertThat(token).contains("token123");
+  }
+
+  @Test
+  @DisplayName("Get refresh token with profile")
+  void getRefreshTokenWithProfile() {
+    when(request.getCookies()).thenReturn(new Cookie[] {new Cookie("refresh_token", "refresh123")});
+
+    Optional<String> token = cookieService.getRefreshToken(request, "default");
+
+    assertThat(token).contains("refresh123");
+  }
+
+  @Test
+  @DisplayName("Multiple profiles use different cookie names")
+  void multipleProfiles() {
+    var multiProfileConfig =
+        new VigilProperties.Cookie(
+            true,
+            "Strict",
+            true,
+            Map.of(
+                "staff",
+                new VigilProperties.CookieProfile("staff_access", "staff_refresh"),
+                "customer",
+                new VigilProperties.CookieProfile("customer_access", "customer_refresh")));
+    var jwtConfig =
+        new VigilProperties.Jwt(
+            "01234567890123456789012345678901",
+            Duration.ofMinutes(15),
+            Duration.ofDays(7),
+            null,
+            null);
+    var multiService = new VigilCookieService(multiProfileConfig, jwtConfig);
+
+    ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+
+    multiService.setAccessTokenCookie(response, "stafftoken", "staff");
+    multiService.setAccessTokenCookie(response, "custtoken", "customer");
+
+    verify(response, times(2)).addHeader(eq("Set-Cookie"), captor.capture());
+    assertThat(captor.getAllValues().get(0)).startsWith("staff_access=stafftoken");
+    assertThat(captor.getAllValues().get(1)).startsWith("customer_access=custtoken");
+  }
+
+  @Test
+  @DisplayName("Set custom cookie")
+  void setCustomCookie() {
+    ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+
+    cookieService.setCookie(response, "custom", "value", 3600);
+
+    verify(response).addHeader(eq("Set-Cookie"), captor.capture());
+    assertThat(captor.getValue())
+        .isEqualTo("custom=value; Max-Age=3600; Path=/; HttpOnly; Secure; SameSite=Lax");
+  }
+
+  @Test
+  @DisplayName("Delete cookie")
+  void deleteCookie() {
+    ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+
+    cookieService.deleteCookie(response, "mycookie");
+
+    verify(response).addHeader(eq("Set-Cookie"), captor.capture());
+    assertThat(captor.getValue())
+        .isEqualTo("mycookie=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax");
+  }
+
+  @Test
+  @DisplayName("Non-secure cookies for development")
+  void nonSecureCookies() {
+    var devConfig =
+        new VigilProperties.Cookie(
+            false,
+            "Lax",
+            false,
+            Map.of("default", new VigilProperties.CookieProfile("access", "refresh")));
+    var jwtConfig =
+        new VigilProperties.Jwt(
+            "01234567890123456789012345678901",
+            Duration.ofMinutes(15),
+            Duration.ofDays(7),
+            null,
+            null);
+    var devService = new VigilCookieService(devConfig, jwtConfig);
+
+    ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+
+    devService.setAccessTokenCookie(response, "token");
+
+    verify(response).addHeader(eq("Set-Cookie"), captor.capture());
+    assertThat(captor.getValue()).isEqualTo("access=token; Max-Age=900; Path=/; SameSite=Lax");
+    assertThat(captor.getValue()).doesNotContain("HttpOnly");
+    assertThat(captor.getValue()).doesNotContain("Secure");
   }
 }

@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
@@ -45,7 +46,7 @@ public record VigilProperties(
       jwt = new Jwt(null, Duration.ofMinutes(15), Duration.ofDays(7), null, null);
     }
     if (cookie == null) {
-      cookie = new Cookie("access_token", "refresh_token", true, "Lax", true);
+      cookie = new Cookie(true, "Lax", true, null);
     }
     if (password == null) {
       password = new Password(12);
@@ -99,38 +100,86 @@ public record VigilProperties(
   }
 
   /**
-   * Cookie configuration.
+   * Cookie configuration with named profiles.
    *
-   * @param accessTokenName cookie name for access tokens
-   * @param refreshTokenName cookie name for refresh tokens
+   * <p>Profiles define cookie names for different user types (e.g., staff, customer). Security
+   * settings are shared across all profiles.
+   *
+   * <p>Example:
+   *
+   * <pre>
+   * vigil:
+   *   cookie:
+   *     secure: true
+   *     http-only: true
+   *     same-site: Lax
+   *     profiles:
+   *       staff:
+   *         access-token-name: staff_access_token
+   *         refresh-token-name: staff_refresh_token
+   *       customer:
+   *         access-token-name: customer_access_token
+   *         refresh-token-name: customer_refresh_token
+   * </pre>
+   *
    * @param secure whether to mark cookies as Secure
    * @param sameSite SameSite policy
    * @param httpOnly whether to mark cookies as HttpOnly
+   * @param profiles named cookie profiles (required, at least one)
    */
   public record Cookie(
-      String accessTokenName,
-      String refreshTokenName,
-      boolean secure,
-      String sameSite,
-      boolean httpOnly) {
-    /**
-     * Applies defaults when cookie values are not provided.
-     *
-     * @param accessTokenName cookie name for access tokens
-     * @param refreshTokenName cookie name for refresh tokens
-     * @param secure whether to mark cookies as Secure
-     * @param sameSite SameSite policy
-     * @param httpOnly whether to mark cookies as HttpOnly
-     */
+      boolean secure, String sameSite, boolean httpOnly, Map<String, CookieProfile> profiles) {
+
+    /** Applies defaults. */
     public Cookie {
+      if (sameSite == null) {
+        sameSite = "Lax";
+      }
+      if (profiles == null || profiles.isEmpty()) {
+        // Default profile if none configured
+        profiles = Map.of("default", new CookieProfile("access_token", "refresh_token"));
+      }
+    }
+
+    /**
+     * Gets a profile by name.
+     *
+     * @param name profile name
+     * @return the profile
+     * @throws IllegalArgumentException if profile not found
+     */
+    public CookieProfile getProfile(String name) {
+      CookieProfile profile = profiles.get(name);
+      if (profile == null) {
+        throw new IllegalArgumentException("Cookie profile not found: " + name);
+      }
+      return profile;
+    }
+
+    /**
+     * Gets the first/default profile.
+     *
+     * @return the first profile
+     */
+    public CookieProfile getDefaultProfile() {
+      return profiles.values().iterator().next();
+    }
+  }
+
+  /**
+   * Cookie profile for a specific user type.
+   *
+   * @param accessTokenName cookie name for access tokens
+   * @param refreshTokenName cookie name for refresh tokens
+   */
+  public record CookieProfile(String accessTokenName, String refreshTokenName) {
+    /** Applies defaults. */
+    public CookieProfile {
       if (accessTokenName == null) {
         accessTokenName = "access_token";
       }
       if (refreshTokenName == null) {
         refreshTokenName = "refresh_token";
-      }
-      if (sameSite == null) {
-        sameSite = "Lax";
       }
     }
   }

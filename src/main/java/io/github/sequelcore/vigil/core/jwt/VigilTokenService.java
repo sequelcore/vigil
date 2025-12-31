@@ -1,48 +1,60 @@
 package io.github.sequelcore.vigil.core.jwt;
 
 import io.github.sequelcore.vigil.autoconfigure.VigilProperties;
+import io.github.sequelcore.vigil.blacklist.VigilBlacklistService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Map;
 import javax.crypto.SecretKey;
 import lombok.Getter;
+import org.springframework.lang.Nullable;
 
-/** Service for JWT token generation and validation. */
+/** Service for JWT token generation, validation, and refresh with rotation. */
 public class VigilTokenService {
 
   private final VigilProperties.Jwt jwtConfig;
   @Getter private final SecretKey signingKey;
+  @Nullable private final VigilBlacklistService blacklistService;
 
-  /**
-   * Creates a token service with the provided JWT configuration.
-   *
-   * @param jwtConfig JWT configuration properties
-   */
+  /** Creates token service without blacklist (refresh rotation disabled). */
   public VigilTokenService(VigilProperties.Jwt jwtConfig) {
+    this(jwtConfig, null);
+  }
+
+  /** Creates token service with blacklist for refresh rotation. */
+  public VigilTokenService(
+      VigilProperties.Jwt jwtConfig, @Nullable VigilBlacklistService blacklistService) {
     this.jwtConfig = jwtConfig;
     this.signingKey = Keys.hmacShaKeyFor(jwtConfig.secret().getBytes(StandardCharsets.UTF_8));
+    this.blacklistService = blacklistService;
   }
 
   /**
-   * Generates an access token with the specified claims.
+   * Generates an access token.
    *
-   * @param request the token request containing subject and claims
-   * @return the generated JWT token
+   * @param request token request with subject, claims, and optional custom TTL
+   * @return the JWT access token
    */
   public String generateAccessToken(TokenRequest request) {
-    return generateToken(request, jwtConfig.accessTtl().toMillis());
+    long ttlMs =
+        request.accessTtl() != null
+            ? request.accessTtl().toMillis()
+            : jwtConfig.accessTtl().toMillis();
+    return generateToken(request, ttlMs);
   }
 
   /**
-   * Generates a refresh token for the specified subject.
+   * Generates a refresh token.
    *
-   * @param subject the token subject (typically username)
-   * @return the generated refresh token
+   * @param subject the token subject
+   * @return the JWT refresh token
    */
   public String generateRefreshToken(String subject) {
     return generateToken(
@@ -51,22 +63,110 @@ public class VigilTokenService {
   }
 
   /**
+   * Generates a refresh token with claims.
+   *
+   * @param request token request (claims will have type=refresh added)
+   * @return the JWT refresh token
+   */
+  public String generateRefreshToken(TokenRequest request) {
+    long ttlMs =
+        request.refreshTtl() != null
+            ? request.refreshTtl().toMillis()
+            : jwtConfig.refreshTtl().toMillis();
+
+    Map<String, Object> claims = new HashMap<>(request.claims());
+    claims.put("type", "refresh");
+
+    return generateToken(
+        TokenRequest.builder().subject(request.subject()).claims(claims).build(), ttlMs);
+  }
+
+  /**
+   * Refreshes tokens with rotation.
+   *
+   * <p>Validates the refresh token, blacklists it (rotation), and generates new access + refresh
+   * tokens.
+   *
+   * @param refreshToken the current refresh token
+   * @return new token pair with expiration times
+   * @throws JwtException if refresh token is invalid or not a refresh token
+   */
+  public TokenRefreshResult refreshTokens(String refreshToken) {
+    return refreshTokens(refreshToken, null);
+  }
+
+  /**
+   * Refreshes tokens with rotation and updated claims.
+   *
+   * @param refreshToken the current refresh token
+   * @param updatedClaims claims to update (merged with existing)
+   * @return new token pair with expiration times
+   * @throws JwtException if refresh token is invalid or not a refresh token
+   */
+  public TokenRefreshResult refreshTokens(String refreshToken, Map<String, Object> updatedClaims) {
+    // Validate refresh token
+    Claims claims = validateAndGetClaims(refreshToken);
+
+    // Verify it's a refresh token
+    String type = claims.get("type", String.class);
+    if (!"refresh".equals(type)) {
+      throw new JwtException("Token is not a refresh token");
+    }
+
+    // Blacklist old refresh token (rotation)
+    if (blacklistService != null) {
+      blacklistService.blacklist(refreshToken);
+    }
+
+    // Build new claims
+    Map<String, Object> newClaims = new HashMap<>();
+    claims.forEach(
+        (key, value) -> {
+          if (!isReservedClaim(key)) {
+            newClaims.put(key, value);
+          }
+        });
+
+    // Merge updated claims
+    if (updatedClaims != null) {
+      newClaims.putAll(updatedClaims);
+    }
+
+    // Remove refresh type for access token
+    newClaims.remove("type");
+
+    String subject = claims.getSubject();
+    Instant now = Instant.now();
+    Instant accessExp = now.plusMillis(jwtConfig.accessTtl().toMillis());
+    Instant refreshExp = now.plusMillis(jwtConfig.refreshTtl().toMillis());
+
+    // Generate new tokens
+    String newAccessToken =
+        generateAccessToken(TokenRequest.builder().subject(subject).claims(newClaims).build());
+
+    String newRefreshToken =
+        generateRefreshToken(TokenRequest.builder().subject(subject).claims(newClaims).build());
+
+    return new TokenRefreshResult(newAccessToken, newRefreshToken, accessExp, refreshExp);
+  }
+
+  /**
    * Validates a token and returns its claims.
    *
-   * @param token the JWT token to validate
+   * @param token the JWT token
    * @return the token claims
-   * @throws ExpiredJwtException if the token has expired
-   * @throws io.jsonwebtoken.JwtException if the token is invalid
+   * @throws ExpiredJwtException if expired
+   * @throws JwtException if invalid
    */
   public Claims validateAndGetClaims(String token) {
     return Jwts.parser().verifyWith(signingKey).build().parseSignedClaims(token).getPayload();
   }
 
   /**
-   * Extracts the subject from a token without validating expiration.
+   * Extracts subject from an expired token.
    *
    * @param token the JWT token
-   * @return the token subject
+   * @return the subject
    */
   public String getSubjectFromExpiredToken(String token) {
     try {
@@ -77,10 +177,10 @@ public class VigilTokenService {
   }
 
   /**
-   * Checks if a token is expired.
+   * Checks if token is expired.
    *
    * @param token the JWT token
-   * @return true if the token is expired
+   * @return true if expired
    */
   public boolean isTokenExpired(String token) {
     try {
@@ -89,6 +189,16 @@ public class VigilTokenService {
     } catch (ExpiredJwtException e) {
       return true;
     }
+  }
+
+  /** Gets configured access token TTL. */
+  public Instant getAccessTokenExpiration() {
+    return Instant.now().plusMillis(jwtConfig.accessTtl().toMillis());
+  }
+
+  /** Gets configured refresh token TTL. */
+  public Instant getRefreshTokenExpiration() {
+    return Instant.now().plusMillis(jwtConfig.refreshTtl().toMillis());
   }
 
   private String generateToken(TokenRequest request, long expirationMs) {
@@ -116,5 +226,15 @@ public class VigilTokenService {
     }
 
     return builder.signWith(signingKey).compact();
+  }
+
+  private boolean isReservedClaim(String key) {
+    return "iss".equals(key)
+        || "sub".equals(key)
+        || "aud".equals(key)
+        || "exp".equals(key)
+        || "nbf".equals(key)
+        || "iat".equals(key)
+        || "jti".equals(key);
   }
 }
