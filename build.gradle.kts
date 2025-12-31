@@ -9,7 +9,7 @@ plugins {
 }
 
 group = "io.github.sequelcore"
-version = "2.0.0"
+version = "2.0.1"
 
 java {
     toolchain {
@@ -36,8 +36,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-autoconfigure")
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
 
-    // JWT
-    implementation("io.jsonwebtoken:jjwt-api:0.12.6")
+    // JWT - api scope exposes Claims, JwtException to consumers
+    api("io.jsonwebtoken:jjwt-api:0.12.6")
     runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
 
