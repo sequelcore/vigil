@@ -100,14 +100,14 @@ The project uses `com.vanniktech.maven.publish` plugin:
 
 ```kotlin
 plugins {
-    id("com.vanniktech.maven.publish") version "0.30.0"
+    id("com.vanniktech.maven.publish") version "0.34.0"
 }
 
 mavenPublishing {
-    publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL, automaticRelease = true)
+    publishToMavenCentral(automaticRelease = true)
     signAllPublications()
 
-    coordinates("io.github.sequelcore", "vigil-spring-boot-starter", "1.0.0")
+    coordinates("io.github.sequelcore", "vigil-spring-boot-starter", version.toString())
 
     pom {
         name.set("Vigil")

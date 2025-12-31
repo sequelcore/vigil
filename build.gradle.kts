@@ -5,7 +5,7 @@ plugins {
     id("com.diffplug.spotless") version "7.0.2"
     id("checkstyle")
     id("jacoco")
-    id("com.vanniktech.maven.publish") version "0.30.0"
+    id("com.vanniktech.maven.publish") version "0.34.0"
 }
 
 group = "io.github.sequelcore"
@@ -118,9 +118,9 @@ tasks.register("qualityCheck") {
     group = "verification"
 }
 
-// Maven Central Publishing via vanniktech plugin
+// Maven Central Publishing via vanniktech plugin (v0.34.0+)
 mavenPublishing {
-    publishToMavenCentral(com.vanniktech.maven.publish.SonatypeHost.CENTRAL_PORTAL, automaticRelease = true)
+    publishToMavenCentral(automaticRelease = true)
     signAllPublications()
 
     coordinates(group.toString(), "vigil-spring-boot-starter", version.toString())
