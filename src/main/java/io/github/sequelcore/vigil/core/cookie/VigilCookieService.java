@@ -31,7 +31,7 @@ public class VigilCookieService {
    * @param token the access token
    */
   public void setAccessTokenCookie(HttpServletResponse response, String token) {
-    setCookie(
+    setSecureCookie(
         response, cookieConfig.accessTokenName(), token, (int) jwtConfig.accessTtl().toSeconds());
   }
 
@@ -42,18 +42,18 @@ public class VigilCookieService {
    * @param token the refresh token
    */
   public void setRefreshTokenCookie(HttpServletResponse response, String token) {
-    setCookie(
+    setSecureCookie(
         response, cookieConfig.refreshTokenName(), token, (int) jwtConfig.refreshTtl().toSeconds());
   }
 
   /**
-   * Clears all authentication cookies.
+   * Clears all authentication cookies (access and refresh tokens).
    *
    * @param response the HTTP response
    */
   public void clearCookies(HttpServletResponse response) {
-    deleteCookie(response, cookieConfig.accessTokenName());
-    deleteCookie(response, cookieConfig.refreshTokenName());
+    setSecureCookie(response, cookieConfig.accessTokenName(), "", 0);
+    setSecureCookie(response, cookieConfig.refreshTokenName(), "", 0);
   }
 
   /**
@@ -76,29 +76,36 @@ public class VigilCookieService {
     return getCookieValue(request, cookieConfig.refreshTokenName());
   }
 
-  private void setCookie(HttpServletResponse response, String name, String value, int maxAge) {
+  /**
+   * Sets a custom named cookie on the response.
+   *
+   * <p>Uses the same security settings (HttpOnly, Secure, SameSite) as configured for auth cookies.
+   *
+   * @param response the HTTP response
+   * @param name the cookie name
+   * @param value the cookie value
+   * @param maxAgeSeconds the max age in seconds
+   */
+  public void setCookie(
+      HttpServletResponse response, String name, String value, int maxAgeSeconds) {
+    setSecureCookie(response, name, value, maxAgeSeconds);
+  }
+
+  /**
+   * Deletes a specific cookie by name.
+   *
+   * @param response the HTTP response
+   * @param name the cookie name to delete
+   */
+  public void deleteCookie(HttpServletResponse response, String name) {
+    setSecureCookie(response, name, "", 0);
+  }
+
+  private void setSecureCookie(
+      HttpServletResponse response, String name, String value, int maxAge) {
     StringBuilder cookie = new StringBuilder();
     cookie.append(name).append("=").append(value);
     cookie.append("; Max-Age=").append(maxAge);
-    cookie.append("; Path=/");
-
-    if (cookieConfig.httpOnly()) {
-      cookie.append("; HttpOnly");
-    }
-
-    if (cookieConfig.secure()) {
-      cookie.append("; Secure");
-    }
-
-    cookie.append("; SameSite=").append(cookieConfig.sameSite());
-
-    response.addHeader("Set-Cookie", cookie.toString());
-  }
-
-  private void deleteCookie(HttpServletResponse response, String name) {
-    StringBuilder cookie = new StringBuilder();
-    cookie.append(name).append("=");
-    cookie.append("; Max-Age=0");
     cookie.append("; Path=/");
 
     if (cookieConfig.httpOnly()) {
