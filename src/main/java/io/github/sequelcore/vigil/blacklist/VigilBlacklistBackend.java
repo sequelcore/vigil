@@ -1,5 +1,8 @@
 package io.github.sequelcore.vigil.blacklist;
 
+import java.time.Instant;
+import java.util.Optional;
+
 /**
  * Backend interface for token blacklist storage.
  *
@@ -22,6 +25,24 @@ public interface VigilBlacklistBackend {
    * @return true if blacklisted
    */
   boolean isBlacklisted(String token);
+
+  /**
+   * Blacklists all tokens for a subject issued before the given timestamp.
+   *
+   * <p>Used for invalidating all sessions when password changes.
+   *
+   * @param subject the user identifier
+   * @param issuedBefore tokens issued before this time are invalid
+   */
+  void blacklistSubject(String subject, Instant issuedBefore);
+
+  /**
+   * Gets the invalidation timestamp for a subject.
+   *
+   * @param subject the user identifier
+   * @return the timestamp if subject is invalidated
+   */
+  Optional<Instant> getSubjectInvalidation(String subject);
 
   /** Clears all entries. */
   void clear();

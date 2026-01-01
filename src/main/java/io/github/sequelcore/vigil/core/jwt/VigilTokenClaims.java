@@ -147,6 +147,15 @@ public record VigilTokenClaims(Claims claims) {
   }
 
   /**
+   * Gets all claims as a map. Alias for {@link #getAllClaims()}.
+   *
+   * @return unmodifiable map of all claims
+   */
+  public Map<String, Object> asMap() {
+    return getAllClaims();
+  }
+
+  /**
    * Checks if the token has expired.
    *
    * @return true if the token is expired

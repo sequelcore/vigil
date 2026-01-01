@@ -18,6 +18,8 @@ import org.springframework.validation.annotation.Validated;
  * @param tenant multi-tenant configuration
  * @param protection login protection configuration
  * @param filter authentication filter configuration
+ * @param session session authentication configuration
+ * @param reset password reset configuration
  */
 @ConfigurationProperties(prefix = "vigil")
 @Validated
@@ -28,7 +30,9 @@ public record VigilProperties(
     Blacklist blacklist,
     Tenant tenant,
     Protection protection,
-    Filter filter) {
+    Filter filter,
+    Session session,
+    Reset reset) {
 
   /**
    * Applies defaults when configuration sections are omitted.
@@ -40,6 +44,8 @@ public record VigilProperties(
    * @param tenant multi-tenant configuration (nullable)
    * @param protection login protection configuration (nullable)
    * @param filter authentication filter configuration (nullable)
+   * @param session session authentication configuration (nullable)
+   * @param reset password reset configuration (nullable)
    */
   public VigilProperties {
     if (jwt == null) {
@@ -62,6 +68,12 @@ public record VigilProperties(
     }
     if (filter == null) {
       filter = new Filter(Collections.emptyList());
+    }
+    if (session == null) {
+      session = new Session(false, "session_token", Duration.ofMinutes(30));
+    }
+    if (reset == null) {
+      reset = new Reset(Duration.ofHours(1));
     }
   }
 
@@ -287,6 +299,49 @@ public record VigilProperties(
     public Filter {
       if (publicPaths == null) {
         publicPaths = Collections.emptyList();
+      }
+    }
+  }
+
+  /**
+   * Session authentication configuration.
+   *
+   * @param enabled whether session auth is enabled
+   * @param cookieName cookie name for session tokens
+   * @param ttl session token TTL
+   */
+  public record Session(boolean enabled, String cookieName, Duration ttl) {
+    /**
+     * Applies defaults.
+     *
+     * @param enabled whether session auth is enabled
+     * @param cookieName cookie name for session tokens
+     * @param ttl session token TTL
+     */
+    public Session {
+      if (cookieName == null || cookieName.isEmpty()) {
+        cookieName = "session_token";
+      }
+      if (ttl == null) {
+        ttl = Duration.ofMinutes(30);
+      }
+    }
+  }
+
+  /**
+   * Password reset configuration.
+   *
+   * @param ttl reset token TTL
+   */
+  public record Reset(Duration ttl) {
+    /**
+     * Applies defaults.
+     *
+     * @param ttl reset token TTL
+     */
+    public Reset {
+      if (ttl == null) {
+        ttl = Duration.ofHours(1);
       }
     }
   }

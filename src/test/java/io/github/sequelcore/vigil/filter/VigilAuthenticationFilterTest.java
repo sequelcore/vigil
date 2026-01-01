@@ -2,6 +2,7 @@ package io.github.sequelcore.vigil.filter;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -62,6 +63,10 @@ class VigilAuthenticationFilterTest {
             Map.of("default", new VigilProperties.CookieProfile("access_token", "refresh_token")));
     tokenService = new VigilTokenService(jwtConfig);
     cookieService = new VigilCookieService(cookieConfig, jwtConfig);
+
+    // Default: tokens not blacklisted
+    when(blacklistService.isBlacklisted(anyString())).thenReturn(false);
+    when(blacklistService.isSubjectInvalidated(anyString(), any())).thenReturn(false);
   }
 
   @AfterEach
@@ -74,7 +79,8 @@ class VigilAuthenticationFilterTest {
   @DisplayName("Skip public paths without authentication")
   void skipPublicPaths() throws ServletException, IOException {
     TestableFilter filter =
-        new TestableFilter(tokenService, cookieService, null, null, List.of("/public/**"));
+        new TestableFilter(
+            tokenService, cookieService, blacklistService, null, List.of("/public/**"));
     when(request.getRequestURI()).thenReturn("/public/health");
 
     filter.doFilterInternal(request, response, filterChain);
@@ -86,7 +92,8 @@ class VigilAuthenticationFilterTest {
   @Test
   @DisplayName("Extract token from Authorization header and authenticate")
   void extractFromAuthorizationHeader() throws ServletException, IOException {
-    TestableFilter filter = new TestableFilter(tokenService, cookieService, null, null, List.of());
+    TestableFilter filter =
+        new TestableFilter(tokenService, cookieService, blacklistService, null, List.of());
     when(request.getRequestURI()).thenReturn("/api/data");
     String token =
         tokenService.generateAccessToken(
@@ -106,7 +113,8 @@ class VigilAuthenticationFilterTest {
   @Test
   @DisplayName("Extract token from cookie when Authorization header missing")
   void extractFromCookie() throws ServletException, IOException {
-    TestableFilter filter = new TestableFilter(tokenService, cookieService, null, null, List.of());
+    TestableFilter filter =
+        new TestableFilter(tokenService, cookieService, blacklistService, null, List.of());
     when(request.getRequestURI()).thenReturn("/api/data");
     String token =
         tokenService.generateAccessToken(
@@ -124,7 +132,8 @@ class VigilAuthenticationFilterTest {
   @Test
   @DisplayName("Handle expired token via callback and skip authentication")
   void handleExpiredToken() throws ServletException, IOException {
-    TestableFilter filter = new TestableFilter(tokenService, cookieService, null, null, List.of());
+    TestableFilter filter =
+        new TestableFilter(tokenService, cookieService, blacklistService, null, List.of());
     when(request.getRequestURI()).thenReturn("/api/data");
     String token = buildExpiredToken("expired-user");
     when(request.getHeader("Authorization")).thenReturn("Bearer " + token);
@@ -158,7 +167,7 @@ class VigilAuthenticationFilterTest {
     UUID headerTenant = UUID.randomUUID();
     UUID tokenTenant = UUID.randomUUID();
     TestableFilter filter =
-        new TestableFilter(tokenService, cookieService, null, tenantService, List.of());
+        new TestableFilter(tokenService, cookieService, blacklistService, tenantService, List.of());
     when(request.getRequestURI()).thenReturn("/api/data");
     String token =
         tokenService.generateAccessToken(

@@ -1,11 +1,15 @@
 package io.github.sequelcore.vigil.autoconfigure;
 
+import io.github.sequelcore.vigil.auth.VigilAuthService;
+import io.github.sequelcore.vigil.auth.VigilResetTokenService;
 import io.github.sequelcore.vigil.blacklist.VigilBlacklistService;
 import io.github.sequelcore.vigil.core.cookie.VigilCookieService;
 import io.github.sequelcore.vigil.core.jwt.VigilTokenService;
 import io.github.sequelcore.vigil.core.password.VigilPasswordService;
 import io.github.sequelcore.vigil.filter.VigilAuthenticationFilter;
 import io.github.sequelcore.vigil.protection.VigilProtectionService;
+import io.github.sequelcore.vigil.session.VigilSessionProvider;
+import io.github.sequelcore.vigil.session.VigilSessionService;
 import io.github.sequelcore.vigil.tenant.VigilTenantService;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -17,8 +21,12 @@ import org.springframework.lang.Nullable;
 /**
  * Auto-configuration for the Vigil authentication starter.
  *
- * <p>Registers core services and the authentication filter. Multi-tenant support is optional and
- * enabled via {@code vigil.tenant.enabled}.
+ * <p>Registers core services and the authentication filter. Optional features:
+ *
+ * <ul>
+ *   <li>Multi-tenancy: {@code vigil.tenant.enabled=true}
+ *   <li>Session auth: {@code vigil.session.enabled=true}
+ * </ul>
  */
 @AutoConfiguration
 @EnableConfigurationProperties(VigilProperties.class)
@@ -28,7 +36,19 @@ public class VigilAutoConfiguration {
   public VigilAutoConfiguration() {}
 
   /**
-   * Creates the token service used to generate and validate JWTs.
+   * Creates the blacklist service for token invalidation.
+   *
+   * @param properties the loaded Vigil properties
+   * @return configured blacklist service
+   */
+  @Bean
+  @ConditionalOnMissingBean
+  public VigilBlacklistService vigilBlacklistService(VigilProperties properties) {
+    return new VigilBlacklistService(properties.blacklist());
+  }
+
+  /**
+   * Creates the token service for JWT generation and validation.
    *
    * @param properties the loaded Vigil properties
    * @param blacklistService the blacklist service for token rotation
@@ -54,7 +74,7 @@ public class VigilAutoConfiguration {
   }
 
   /**
-   * Creates the cookie service that manages access and refresh token cookies.
+   * Creates the cookie service for token cookies.
    *
    * @param properties the loaded Vigil properties
    * @return configured cookie service
@@ -63,18 +83,6 @@ public class VigilAutoConfiguration {
   @ConditionalOnMissingBean
   public VigilCookieService vigilCookieService(VigilProperties properties) {
     return new VigilCookieService(properties.cookie(), properties.jwt());
-  }
-
-  /**
-   * Creates the blacklist service for token invalidation.
-   *
-   * @param properties the loaded Vigil properties
-   * @return configured blacklist service
-   */
-  @Bean
-  @ConditionalOnMissingBean
-  public VigilBlacklistService vigilBlacklistService(VigilProperties properties) {
-    return new VigilBlacklistService(properties.blacklist());
   }
 
   /**
@@ -103,6 +111,55 @@ public class VigilAutoConfiguration {
   }
 
   /**
+   * Creates the high-level auth service.
+   *
+   * @param tokenService the token service
+   * @param cookieService the cookie service
+   * @param blacklistService the blacklist service
+   * @return configured auth service
+   */
+  @Bean
+  @ConditionalOnMissingBean
+  public VigilAuthService vigilAuthService(
+      VigilTokenService tokenService,
+      VigilCookieService cookieService,
+      VigilBlacklistService blacklistService) {
+    return new VigilAuthService(tokenService, cookieService, blacklistService);
+  }
+
+  /**
+   * Creates the reset token service for password recovery.
+   *
+   * @param tokenService the token service
+   * @param blacklistService the blacklist service
+   * @param properties the loaded Vigil properties
+   * @return configured reset token service
+   */
+  @Bean
+  @ConditionalOnMissingBean
+  public VigilResetTokenService vigilResetTokenService(
+      VigilTokenService tokenService,
+      VigilBlacklistService blacklistService,
+      VigilProperties properties) {
+    return new VigilResetTokenService(tokenService, blacklistService, properties.reset());
+  }
+
+  /**
+   * Creates the session service when session auth is enabled.
+   *
+   * @param cookieService the cookie service
+   * @param properties the loaded Vigil properties
+   * @return configured session service
+   */
+  @Bean
+  @ConditionalOnMissingBean
+  @ConditionalOnProperty(prefix = "vigil.session", name = "enabled", havingValue = "true")
+  public VigilSessionService vigilSessionService(
+      VigilCookieService cookieService, VigilProperties properties) {
+    return new VigilSessionService(cookieService, properties.session());
+  }
+
+  /**
    * Creates the authentication filter.
    *
    * @param properties the loaded Vigil properties
@@ -110,6 +167,8 @@ public class VigilAutoConfiguration {
    * @param cookieService the cookie service for token extraction
    * @param blacklistService the blacklist service for token invalidation
    * @param tenantService optional tenant service
+   * @param sessionService optional session service
+   * @param sessionProvider optional session provider (application-provided)
    * @return configured authentication filter
    */
   @Bean
@@ -119,12 +178,16 @@ public class VigilAutoConfiguration {
       VigilTokenService tokenService,
       VigilCookieService cookieService,
       VigilBlacklistService blacklistService,
-      @Nullable VigilTenantService tenantService) {
+      @Nullable VigilTenantService tenantService,
+      @Nullable VigilSessionService sessionService,
+      @Nullable VigilSessionProvider<?> sessionProvider) {
     return new VigilAuthenticationFilter(
         tokenService,
         cookieService,
         blacklistService,
         tenantService,
+        sessionService,
+        sessionProvider,
         properties.filter().publicPaths());
   }
 }

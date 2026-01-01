@@ -172,7 +172,14 @@ public class VigilCookieService {
     response.addHeader("Set-Cookie", cookie.toString());
   }
 
-  private Optional<String> getCookieValue(HttpServletRequest request, String name) {
+  /**
+   * Gets a cookie value by name.
+   *
+   * @param request HTTP request
+   * @param name cookie name
+   * @return cookie value if present
+   */
+  public Optional<String> getCookieValue(HttpServletRequest request, String name) {
     Cookie[] cookies = request.getCookies();
     if (cookies == null) {
       return Optional.empty();

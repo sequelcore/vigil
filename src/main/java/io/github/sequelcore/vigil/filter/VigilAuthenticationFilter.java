@@ -4,6 +4,8 @@ import io.github.sequelcore.vigil.blacklist.VigilBlacklistService;
 import io.github.sequelcore.vigil.core.cookie.VigilCookieService;
 import io.github.sequelcore.vigil.core.jwt.VigilTokenClaims;
 import io.github.sequelcore.vigil.core.jwt.VigilTokenService;
+import io.github.sequelcore.vigil.session.VigilSessionProvider;
+import io.github.sequelcore.vigil.session.VigilSessionService;
 import io.github.sequelcore.vigil.tenant.VigilTenantContext;
 import io.github.sequelcore.vigil.tenant.VigilTenantService;
 import io.jsonwebtoken.ExpiredJwtException;
@@ -13,11 +15,10 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.util.Collections;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.regex.Pattern;
 import org.springframework.lang.Nullable;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -26,16 +27,34 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
- * JWT authentication filter that validates tokens from cookies or Authorization header.
+ * JWT and session authentication filter.
  *
- * <p>Supports dual client mode:
+ * <p>Authentication flow:
  *
- * <ul>
- *   <li>Web clients: Token extracted from HttpOnly cookies
- *   <li>Mobile/API clients: Token extracted from Authorization Bearer header
- * </ul>
+ * <ol>
+ *   <li>Check if path is public → skip authentication
+ *   <li>Try to extract JWT from Authorization header or cookie
+ *   <li>If JWT found → validate and authenticate
+ *   <li>If no JWT and session provider exists → try session token
+ *   <li>If no authentication → call onMissingAuthentication()
+ * </ol>
  *
- * <p>Extend this class to customize authentication behavior.
+ * <p>Extend this class to customize authentication behavior:
+ *
+ * <pre>{@code
+ * @Component
+ * public class MyAuthFilter extends VigilAuthenticationFilter {
+ *
+ *     @Override
+ *     protected void onAuthenticationSuccess(
+ *             HttpServletRequest request,
+ *             HttpServletResponse response,
+ *             VigilTokenClaims claims) {
+ *         // Populate application-specific context
+ *         MyUserContext.set(claims.getString("userId").orElse(null));
+ *     }
+ * }
+ * }</pre>
  */
 public class VigilAuthenticationFilter extends OncePerRequestFilter {
 
@@ -44,31 +63,57 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
 
   private final VigilTokenService tokenService;
   private final VigilCookieService cookieService;
-  @Nullable private final VigilBlacklistService blacklistService;
+  private final VigilBlacklistService blacklistService;
   @Nullable private final VigilTenantService tenantService;
+  @Nullable private final VigilSessionService sessionService;
+  @Nullable private final VigilSessionProvider<?> sessionProvider;
 
-  private final List<Pattern> publicPathPatterns;
+  private final PathMatcher publicPathMatcher;
 
   /**
-   * Creates a new authentication filter.
+   * Creates a new authentication filter with all dependencies.
    *
    * @param tokenService the token service for JWT validation
    * @param cookieService the cookie service for token extraction
-   * @param blacklistService optional blacklist service
-   * @param tenantService optional tenant service
+   * @param blacklistService the blacklist service for token/subject invalidation
+   * @param tenantService optional tenant service for multi-tenancy
+   * @param sessionService optional session service for stateful sessions
+   * @param sessionProvider optional session provider (application-implemented)
    * @param publicPaths list of public path patterns (supports * and ** wildcards)
    */
   public VigilAuthenticationFilter(
       VigilTokenService tokenService,
       VigilCookieService cookieService,
-      @Nullable VigilBlacklistService blacklistService,
+      VigilBlacklistService blacklistService,
       @Nullable VigilTenantService tenantService,
+      @Nullable VigilSessionService sessionService,
+      @Nullable VigilSessionProvider<?> sessionProvider,
       List<String> publicPaths) {
     this.tokenService = tokenService;
     this.cookieService = cookieService;
     this.blacklistService = blacklistService;
     this.tenantService = tenantService;
-    this.publicPathPatterns = compilePathPatterns(publicPaths);
+    this.sessionService = sessionService;
+    this.sessionProvider = sessionProvider;
+    this.publicPathMatcher = new PathMatcher(publicPaths);
+  }
+
+  /**
+   * Backwards-compatible constructor without session support.
+   *
+   * @param tokenService the token service
+   * @param cookieService the cookie service
+   * @param blacklistService the blacklist service
+   * @param tenantService optional tenant service
+   * @param publicPaths public path patterns
+   */
+  public VigilAuthenticationFilter(
+      VigilTokenService tokenService,
+      VigilCookieService cookieService,
+      VigilBlacklistService blacklistService,
+      @Nullable VigilTenantService tenantService,
+      List<String> publicPaths) {
+    this(tokenService, cookieService, blacklistService, tenantService, null, null, publicPaths);
   }
 
   @Override
@@ -85,66 +130,31 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
         return;
       }
 
-      // Extract token from request
+      // Try JWT authentication first
       Optional<String> tokenOpt = extractToken(request);
 
-      if (tokenOpt.isEmpty()) {
-        onMissingToken(request, response);
-        filterChain.doFilter(request, response);
-        return;
-      }
-
-      String token = tokenOpt.get();
-
-      // Check blacklist if enabled
-      if (blacklistService != null && blacklistService.isBlacklisted(token)) {
-        onBlacklistedToken(request, response, token);
-        filterChain.doFilter(request, response);
-        return;
-      }
-
-      // Validate token and extract claims
-      VigilTokenClaims claims;
-      try {
-        claims = new VigilTokenClaims(tokenService.validateAndGetClaims(token));
-      } catch (ExpiredJwtException e) {
-        onExpiredToken(request, response, token);
-        filterChain.doFilter(request, response);
-        return;
-      } catch (JwtException e) {
-        onInvalidToken(request, response, token, e);
-        filterChain.doFilter(request, response);
-        return;
-      }
-
-      // Handle tenant context if enabled
-      if (tenantService != null) {
-        Optional<UUID> headerTenant = tenantService.extractTenantId(request);
-        Optional<UUID> tokenTenant = claims.getUuid("tenantId");
-
-        if (headerTenant.isPresent()) {
-          if (tokenTenant.isPresent() && !headerTenant.get().equals(tokenTenant.get())) {
-            onTenantMismatch(request, response, headerTenant.get(), tokenTenant.get());
-            filterChain.doFilter(request, response);
-            return;
-          }
-          tenantService.setCurrentTenant(headerTenant.get());
-        } else if (tokenTenant.isPresent()) {
-          tenantService.setCurrentTenant(tokenTenant.get());
+      if (tokenOpt.isPresent()) {
+        if (authenticateJwt(request, response, tokenOpt.get())) {
+          filterChain.doFilter(request, response);
+          return;
         }
       }
 
-      // Set up Spring Security context
-      List<SimpleGrantedAuthority> authorities = extractAuthorities(claims);
-      UsernamePasswordAuthenticationToken authentication =
-          new UsernamePasswordAuthenticationToken(claims.getSubject(), null, authorities);
-      authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-      SecurityContextHolder.getContext().setAuthentication(authentication);
+      // Try session authentication if available
+      if (sessionService != null && sessionProvider != null) {
+        Optional<String> sessionTokenOpt = sessionService.extractToken(request);
+        if (sessionTokenOpt.isPresent()) {
+          if (authenticateSession(request, response, sessionTokenOpt.get())) {
+            filterChain.doFilter(request, response);
+            return;
+          }
+        }
+      }
 
-      // Notify subclasses of successful authentication
-      onAuthenticationSuccess(request, response, claims);
-
+      // No authentication found
+      onMissingToken(request, response);
       filterChain.doFilter(request, response);
+
     } finally {
       // Clean up tenant context
       if (tenantService != null) {
@@ -153,25 +163,155 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
     }
   }
 
+  private boolean authenticateJwt(
+      HttpServletRequest request, HttpServletResponse response, String token) {
+
+    // Check token blacklist
+    if (blacklistService.isBlacklisted(token)) {
+      onBlacklistedToken(request, response, token);
+      return false;
+    }
+
+    // Validate token and extract claims
+    VigilTokenClaims claims;
+    try {
+      claims = new VigilTokenClaims(tokenService.validateAndGetClaims(token));
+    } catch (ExpiredJwtException e) {
+      onExpiredToken(request, response, token);
+      return false;
+    } catch (JwtException e) {
+      onInvalidToken(request, response, token, e);
+      return false;
+    }
+
+    // Check subject blacklist (for invalidateAllSessions)
+    String subject = claims.getSubject();
+    Instant issuedAt = claims.getIssuedAt();
+    if (subject != null && issuedAt != null) {
+      if (blacklistService.isSubjectInvalidated(subject, issuedAt)) {
+        onBlacklistedToken(request, response, token);
+        return false;
+      }
+    }
+
+    // Handle tenant context if enabled
+    if (tenantService != null) {
+      if (!handleTenantContext(request, response, claims)) {
+        return false;
+      }
+    }
+
+    // Set up Spring Security context
+    List<SimpleGrantedAuthority> authorities = extractAuthorities(claims);
+    UsernamePasswordAuthenticationToken authentication =
+        new UsernamePasswordAuthenticationToken(claims.getSubject(), null, authorities);
+    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+    SecurityContextHolder.getContext().setAuthentication(authentication);
+
+    // Notify subclasses of successful authentication
+    onAuthenticationSuccess(request, response, claims);
+
+    return true;
+  }
+
+  @SuppressWarnings("unchecked")
+  private boolean authenticateSession(
+      HttpServletRequest request, HttpServletResponse response, String sessionToken) {
+
+    // Extract tenant ID
+    UUID tenantId = null;
+    if (tenantService != null) {
+      tenantId = tenantService.extractTenantId(request).orElse(null);
+      if (tenantId != null) {
+        tenantService.setCurrentTenant(tenantId);
+      }
+    }
+
+    // Find session entity
+    VigilSessionProvider<Object> provider = (VigilSessionProvider<Object>) sessionProvider;
+    Optional<?> sessionOpt = provider.findByToken(sessionToken, tenantId);
+
+    if (sessionOpt.isEmpty()) {
+      onSessionNotFound(request, response, sessionToken);
+      return false;
+    }
+
+    Object session = sessionOpt.get();
+
+    // Check expiration
+    if (provider.isExpired(session)) {
+      onSessionExpired(request, response, sessionToken, session);
+      return false;
+    }
+
+    // Set up Spring Security context
+    String principal = provider.getPrincipal(session);
+    if (principal == null || principal.isEmpty()) {
+      onSessionNotFound(request, response, sessionToken);
+      return false;
+    }
+
+    List<SimpleGrantedAuthority> authorities =
+        provider.getRoles(session).stream()
+            .map(r -> r.startsWith("ROLE_") ? r : "ROLE_" + r)
+            .map(SimpleGrantedAuthority::new)
+            .toList();
+
+    UsernamePasswordAuthenticationToken authentication =
+        new UsernamePasswordAuthenticationToken(principal, null, authorities);
+    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+    SecurityContextHolder.getContext().setAuthentication(authentication);
+
+    // Let application populate its context
+    provider.onAuthenticated(session, request);
+
+    // Notify subclasses
+    onSessionAuthenticated(request, response, session);
+
+    return true;
+  }
+
+  private boolean handleTenantContext(
+      HttpServletRequest request, HttpServletResponse response, VigilTokenClaims claims) {
+
+    Optional<UUID> headerTenant = tenantService.extractTenantId(request);
+    Optional<UUID> tokenTenant = claims.getUuid("tenantId");
+
+    if (headerTenant.isPresent()) {
+      if (tokenTenant.isPresent() && !headerTenant.get().equals(tokenTenant.get())) {
+        onTenantMismatch(request, response, headerTenant.get(), tokenTenant.get());
+        return false;
+      }
+      tenantService.setCurrentTenant(headerTenant.get());
+    } else if (tokenTenant.isPresent()) {
+      tenantService.setCurrentTenant(tokenTenant.get());
+    }
+
+    return true;
+  }
+
   /**
    * Extracts the JWT token from the request. Checks Authorization header first, then cookies.
    *
    * @param request the HTTP request
-   * @return the token if present
+   * @return the token if present and non-empty
    */
   protected Optional<String> extractToken(HttpServletRequest request) {
     // Try Authorization header first (mobile/API clients)
     String authHeader = request.getHeader(AUTHORIZATION_HEADER);
     if (authHeader != null && authHeader.startsWith(BEARER_PREFIX)) {
-      return Optional.of(authHeader.substring(BEARER_PREFIX.length()));
+      String token = authHeader.substring(BEARER_PREFIX.length()).trim();
+      if (!token.isEmpty()) {
+        return Optional.of(token);
+      }
     }
 
     // Fall back to cookie (web clients)
-    return cookieService.getAccessToken(request);
+    return cookieService.getAccessToken(request).filter(t -> !t.isEmpty());
   }
 
   /**
-   * Extracts authorities from token claims. Override to customize authority extraction.
+   * Extracts authorities from token claims.
    *
    * @param claims the token claims
    * @return list of granted authorities
@@ -199,11 +339,15 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
    * @return true if the path is public
    */
   protected boolean isPublicPath(String path) {
-    return publicPathPatterns.stream().anyMatch(pattern -> pattern.matcher(path).matches());
+    return publicPathMatcher.matches(path);
   }
 
+  // ==========================================================================
+  // JWT Hooks
+  // ==========================================================================
+
   /**
-   * Called when authentication succeeds. Override to add custom logic.
+   * Called when JWT authentication succeeds.
    *
    * @param request the HTTP request
    * @param response the HTTP response
@@ -211,7 +355,7 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
    */
   protected void onAuthenticationSuccess(
       HttpServletRequest request, HttpServletResponse response, VigilTokenClaims claims) {
-    // Default: no-op. Override in subclass.
+    // Default: no-op
   }
 
   /**
@@ -221,7 +365,7 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
    * @param response the HTTP response
    */
   protected void onMissingToken(HttpServletRequest request, HttpServletResponse response) {
-    // Default: no-op. Override in subclass if needed.
+    // Default: no-op
   }
 
   /**
@@ -233,7 +377,7 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
    */
   protected void onExpiredToken(
       HttpServletRequest request, HttpServletResponse response, String token) {
-    // Default: no-op. Override in subclass if needed.
+    // Default: no-op
   }
 
   /**
@@ -249,7 +393,7 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
       HttpServletResponse response,
       String token,
       JwtException exception) {
-    // Default: no-op. Override in subclass if needed.
+    // Default: no-op
   }
 
   /**
@@ -261,7 +405,7 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
    */
   protected void onBlacklistedToken(
       HttpServletRequest request, HttpServletResponse response, String token) {
-    // Default: no-op. Override in subclass if needed.
+    // Default: no-op
   }
 
   /**
@@ -277,40 +421,47 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
       HttpServletResponse response,
       UUID headerTenant,
       UUID tokenTenant) {
-    // Default: no-op. Override in subclass if needed.
+    // Default: no-op
   }
 
-  private List<Pattern> compilePathPatterns(List<String> paths) {
-    if (paths == null || paths.isEmpty()) {
-      return Collections.emptyList();
-    }
+  // ==========================================================================
+  // Session Hooks
+  // ==========================================================================
 
-    return paths.stream().map(this::pathToRegex).map(Pattern::compile).toList();
+  /**
+   * Called when session authentication succeeds.
+   *
+   * @param request the HTTP request
+   * @param response the HTTP response
+   * @param session the authenticated session entity
+   */
+  protected void onSessionAuthenticated(
+      HttpServletRequest request, HttpServletResponse response, Object session) {
+    // Default: no-op
   }
 
-  private String pathToRegex(String path) {
-    // Escape regex special characters except * and **
-    String regex =
-        path.replace(".", "\\.")
-            .replace("?", "\\?")
-            .replace("+", "\\+")
-            .replace("(", "\\(")
-            .replace(")", "\\)")
-            .replace("[", "\\[")
-            .replace("]", "\\]")
-            .replace("{", "\\{")
-            .replace("}", "\\}")
-            .replace("^", "\\^")
-            .replace("$", "\\$")
-            .replace("|", "\\|");
+  /**
+   * Called when session token is not found in database.
+   *
+   * @param request the HTTP request
+   * @param response the HTTP response
+   * @param token the session token that was not found
+   */
+  protected void onSessionNotFound(
+      HttpServletRequest request, HttpServletResponse response, String token) {
+    // Default: no-op
+  }
 
-    // Convert ** to match any path segments
-    regex = regex.replace("**", "@@DOUBLE_STAR@@");
-    // Convert * to match single path segment
-    regex = regex.replace("*", "[^/]*");
-    // Convert ** placeholder to match anything
-    regex = regex.replace("@@DOUBLE_STAR@@", ".*");
-
-    return "^" + regex + "$";
+  /**
+   * Called when session has expired.
+   *
+   * @param request the HTTP request
+   * @param response the HTTP response
+   * @param token the session token
+   * @param session the expired session entity
+   */
+  protected void onSessionExpired(
+      HttpServletRequest request, HttpServletResponse response, String token, Object session) {
+    // Default: no-op
   }
 }
