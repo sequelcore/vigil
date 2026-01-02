@@ -7,7 +7,7 @@ JWT authentication for Spring Boot. Security by default.
 ## Install
 
 ```kotlin
-implementation("io.github.sequelcore:vigil-spring-boot-starter:2.4.0")
+implementation("io.github.sequelcore:vigil-spring-boot-starter:2.4.1")
 ```
 
 ## Configure

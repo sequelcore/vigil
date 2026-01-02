@@ -35,11 +35,16 @@
 - Remove convenience constructors from `VigilAuthenticationFilter`
 - Single constructor with `FilterConfig` parameter
 
-### v2.4.0 - Profile Paths (Current)
+### v2.4.0 - Profile Paths
 - Replace `checkAllProfiles` with explicit `profile-paths` mapping
 - Path-based cookie profile resolution
 - `ProfilePathMatcher` for request path → cookie profile mapping
 - Follows industry standard pattern (Spring Security, ASP.NET Core)
+
+### v2.4.1 - Security Hardening (Current)
+- Refactor cookie handling to use Spring's `ResponseCookie` builder
+- Replace manual Set-Cookie header construction
+- Proper encoding and RFC-compliant cookie formatting
 
 ## Planned
 

@@ -8,7 +8,7 @@
 |-------|-------|
 | Group ID | io.github.sequelcore |
 | Artifact ID | vigil-spring-boot-starter |
-| Version | 2.4.0 |
+| Version | 2.4.1 |
 | Java | 21 |
 | Spring Boot | 3.5.x |
 

@@ -6,6 +6,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.Arrays;
 import java.util.Optional;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 
 /**
  * Service for managing authentication cookies with profile support.
@@ -35,7 +37,7 @@ public class VigilCookieService {
    */
   public void setAccessTokenCookie(HttpServletResponse response, String token, String profile) {
     var p = cookieConfig.getProfile(profile);
-    setSecureCookie(response, p.accessTokenName(), token, (int) jwtConfig.accessTtl().toSeconds());
+    addCookie(response, p.accessTokenName(), token, (int) jwtConfig.accessTtl().toSeconds());
   }
 
   /**
@@ -47,8 +49,7 @@ public class VigilCookieService {
    */
   public void setRefreshTokenCookie(HttpServletResponse response, String token, String profile) {
     var p = cookieConfig.getProfile(profile);
-    setSecureCookie(
-        response, p.refreshTokenName(), token, (int) jwtConfig.refreshTtl().toSeconds());
+    addCookie(response, p.refreshTokenName(), token, (int) jwtConfig.refreshTtl().toSeconds());
   }
 
   /**
@@ -59,8 +60,8 @@ public class VigilCookieService {
    */
   public void clearCookies(HttpServletResponse response, String profile) {
     var p = cookieConfig.getProfile(profile);
-    setSecureCookie(response, p.accessTokenName(), "", 0);
-    setSecureCookie(response, p.refreshTokenName(), "", 0);
+    addCookie(response, p.accessTokenName(), "", 0);
+    addCookie(response, p.refreshTokenName(), "", 0);
   }
 
   /**
@@ -94,21 +95,20 @@ public class VigilCookieService {
   /** Sets access token cookie using default profile. */
   public void setAccessTokenCookie(HttpServletResponse response, String token) {
     var p = cookieConfig.getDefaultProfile();
-    setSecureCookie(response, p.accessTokenName(), token, (int) jwtConfig.accessTtl().toSeconds());
+    addCookie(response, p.accessTokenName(), token, (int) jwtConfig.accessTtl().toSeconds());
   }
 
   /** Sets refresh token cookie using default profile. */
   public void setRefreshTokenCookie(HttpServletResponse response, String token) {
     var p = cookieConfig.getDefaultProfile();
-    setSecureCookie(
-        response, p.refreshTokenName(), token, (int) jwtConfig.refreshTtl().toSeconds());
+    addCookie(response, p.refreshTokenName(), token, (int) jwtConfig.refreshTtl().toSeconds());
   }
 
   /** Clears cookies using default profile. */
   public void clearCookies(HttpServletResponse response) {
     var p = cookieConfig.getDefaultProfile();
-    setSecureCookie(response, p.accessTokenName(), "", 0);
-    setSecureCookie(response, p.refreshTokenName(), "", 0);
+    addCookie(response, p.accessTokenName(), "", 0);
+    addCookie(response, p.refreshTokenName(), "", 0);
   }
 
   /** Gets access token using default profile. */
@@ -137,7 +137,7 @@ public class VigilCookieService {
    */
   public void setCookie(
       HttpServletResponse response, String name, String value, int maxAgeSeconds) {
-    setSecureCookie(response, name, value, maxAgeSeconds);
+    addCookie(response, name, value, maxAgeSeconds);
   }
 
   /**
@@ -147,29 +147,23 @@ public class VigilCookieService {
    * @param name cookie name
    */
   public void deleteCookie(HttpServletResponse response, String name) {
-    setSecureCookie(response, name, "", 0);
+    addCookie(response, name, "", 0);
   }
 
   // ==========================================================================
   // Internal
   // ==========================================================================
 
-  private void setSecureCookie(
-      HttpServletResponse response, String name, String value, int maxAge) {
-    StringBuilder cookie = new StringBuilder();
-    cookie.append(name).append("=").append(value);
-    cookie.append("; Max-Age=").append(maxAge);
-    cookie.append("; Path=/");
-
-    if (cookieConfig.httpOnly()) {
-      cookie.append("; HttpOnly");
-    }
-    if (cookieConfig.secure()) {
-      cookie.append("; Secure");
-    }
-    cookie.append("; SameSite=").append(cookieConfig.sameSite());
-
-    response.addHeader("Set-Cookie", cookie.toString());
+  private void addCookie(HttpServletResponse response, String name, String value, int maxAge) {
+    ResponseCookie cookie =
+        ResponseCookie.from(name, value)
+            .maxAge(maxAge)
+            .path("/")
+            .httpOnly(cookieConfig.httpOnly())
+            .secure(cookieConfig.secure())
+            .sameSite(cookieConfig.sameSite())
+            .build();
+    response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
   }
 
   /**
