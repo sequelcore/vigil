@@ -165,6 +165,9 @@ public class VigilAutoConfiguration {
   /**
    * Creates the authentication filter.
    *
+   * <p>This filter is always registered and cannot be replaced. Applications customize
+   * authentication behavior via {@link VigilContextPopulator} implementations.
+   *
    * @param properties the loaded Vigil properties
    * @param tokenService the token service for JWT validation
    * @param cookieService the cookie service for token extraction
@@ -176,7 +179,6 @@ public class VigilAutoConfiguration {
    * @return configured authentication filter
    */
   @Bean
-  @ConditionalOnMissingBean
   public VigilAuthenticationFilter vigilAuthenticationFilter(
       VigilProperties properties,
       VigilTokenService tokenService,

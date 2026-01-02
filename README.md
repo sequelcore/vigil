@@ -7,7 +7,7 @@ JWT authentication for Spring Boot. Security by default.
 ## Install
 
 ```kotlin
-implementation("io.github.sequelcore:vigil-spring-boot-starter:2.4.1")
+implementation("io.github.sequelcore:vigil-spring-boot-starter:2.5.0")
 ```
 
 ## Configure
@@ -93,8 +93,10 @@ vigil:
         refresh-token-name: customer_refresh
   filter:
     profile-paths:
-      staff: /api/console/**
-      customer: /api/box/**
+      staff:
+        - /api/console/**
+      customer:
+        - /api/box/**
 ```
 
 Each portal has its own path namespace. The filter resolves which cookie to check based on the request path.
@@ -108,6 +110,31 @@ cookieService.setAccessTokenCookie(response, token, "customer");
 ```
 
 Requests to `/api/console/**` authenticate via `staff_token`. Requests to `/api/box/**` authenticate via `customer_token`. Same user can be logged into both portals simultaneously.
+
+## Custom Security Context
+
+Populate your app's security context after Vigil authenticates:
+
+```java
+@Component
+public class UserContextPopulator implements VigilContextPopulator {
+
+    @Override
+    public void populate(HttpServletRequest request, VigilTokenClaims claims) {
+        UserContext.set(
+            claims.getString("userId").orElse(null),
+            claims.getString("role").orElse(null)
+        );
+    }
+
+    @Override
+    public void clear() {
+        UserContext.clear();
+    }
+}
+```
+
+Vigil auto-discovers all `VigilContextPopulator` beans and calls them after authentication. This is the only extension point - the filter itself cannot be replaced.
 
 ## Guest Sessions
 
@@ -143,31 +170,6 @@ public class GuestSessionProvider implements VigilSessionProvider<Guest> {
     }
 }
 ```
-
-## Custom Security Context
-
-Populate your app's security context after Vigil authenticates:
-
-```java
-@Component
-public class UserContextPopulator implements VigilContextPopulator {
-
-    @Override
-    public void populate(HttpServletRequest request, VigilTokenClaims claims) {
-        UserContext.set(
-            claims.getString("userId").orElse(null),
-            claims.getString("role").orElse(null)
-        );
-    }
-
-    @Override
-    public void clear() {
-        UserContext.clear();
-    }
-}
-```
-
-Vigil auto-discovers all `VigilContextPopulator` beans and calls them after authentication.
 
 ## Password Strength
 
@@ -251,8 +253,10 @@ vigil:
   filter:
     public-paths: []
     profile-paths:              # Path → cookie profile mapping
-      staff: /api/console/**
-      customer: /api/box/**
+      staff:
+        - /api/console/**
+      customer:
+        - /api/box/**
 
   reset:
     ttl: 1h                     # Password reset token TTL
