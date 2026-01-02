@@ -1,15 +1,13 @@
 # Vigil
 
-Opinionated JWT authentication for Spring Boot. Security by default, not by configuration.
+JWT authentication for Spring Boot. Security by default.
 
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.sequelcore/vigil-spring-boot-starter.svg)](https://central.sonatype.com/artifact/io.github.sequelcore/vigil-spring-boot-starter)
-[![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/projects/jdk/21/)
-[![Spring Boot 3.5](https://img.shields.io/badge/Spring%20Boot-3.5-green.svg)](https://spring.io/projects/spring-boot)
 
 ## Install
 
 ```kotlin
-implementation("io.github.sequelcore:vigil-spring-boot-starter:2.0.0")
+implementation("io.github.sequelcore:vigil-spring-boot-starter:2.3.0")
 ```
 
 ## Configure
@@ -18,6 +16,8 @@ implementation("io.github.sequelcore:vigil-spring-boot-starter:2.0.0")
 vigil:
   jwt:
     secret: ${JWT_SECRET}
+    access-ttl: 15m
+    refresh-ttl: 7d
   cookie:
     profiles:
       default:
@@ -29,7 +29,21 @@ vigil:
       - /public/**
 ```
 
-## Use
+## Services
+
+| Service | Purpose |
+|---------|---------|
+| `VigilTokenService` | JWT generation, validation, refresh with rotation |
+| `VigilPasswordService` | BCrypt hashing, strength scoring, rehash detection |
+| `VigilCookieService` | HTTP-Only cookie management with profiles |
+| `VigilBlacklistService` | Token and subject invalidation |
+| `VigilProtectionService` | Brute-force prevention, account lockout |
+| `VigilAuthService` | High-level logout, refresh, session invalidation |
+| `VigilResetTokenService` | Single-use password reset tokens |
+| `VigilSessionService` | Guest/anonymous session tokens |
+| `VigilTenantService` | Multi-tenant context management |
+
+## Basic Usage
 
 ```java
 @RestController
@@ -39,167 +53,122 @@ public class AuthController {
     private final VigilTokenService tokenService;
     private final VigilPasswordService passwordService;
     private final VigilCookieService cookieService;
-    private final VigilProtectionService protectionService;
+    private final VigilAuthService authService;
 
-    @PostMapping("/auth/login")
-    public AuthResponse login(@RequestBody LoginRequest req, HttpServletResponse res) {
-        if (protectionService.isLocked(req.email())) {
-            throw new AccountLockedException("Too many attempts");
-        }
-
+    @PostMapping("/login")
+    public void login(@RequestBody LoginRequest req, HttpServletResponse res) {
         User user = userRepository.findByEmail(req.email())
             .filter(u -> passwordService.matches(req.password(), u.getPasswordHash()))
-            .orElseThrow(() -> {
-                protectionService.recordFailedAttempt(req.email());
-                return new BadCredentialsException("Invalid credentials");
-            });
+            .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
 
-        protectionService.recordSuccessfulLogin(req.email());
-
-        String access = tokenService.generateAccessToken(
+        String token = tokenService.generateAccessToken(
             TokenRequest.builder()
                 .subject(user.getId().toString())
                 .claim("role", user.getRole())
                 .build());
-        String refresh = tokenService.generateRefreshToken(user.getId().toString());
 
-        cookieService.setAccessTokenCookie(res, access);
-        cookieService.setRefreshTokenCookie(res, refresh);
-
-        return new AuthResponse(user);
+        cookieService.setAccessTokenCookie(res, token);
     }
 
-    @PostMapping("/auth/refresh")
-    public AuthResponse refresh(HttpServletRequest req, HttpServletResponse res) {
-        String refreshToken = cookieService.getRefreshToken(req)
-            .orElseThrow(() -> new BadCredentialsException("No refresh token"));
-
-        // Rotate tokens (blacklists old refresh token)
-        TokenRefreshResult result = tokenService.refreshTokens(refreshToken);
-
-        cookieService.setAccessTokenCookie(res, result.accessToken());
-        cookieService.setRefreshTokenCookie(res, result.refreshToken());
-
-        return new AuthResponse(result.accessExpiresAt());
-    }
-
-    @PostMapping("/auth/logout")
-    public void logout(HttpServletResponse res) {
-        cookieService.clearCookies(res);
+    @PostMapping("/logout")
+    public void logout(HttpServletRequest req, HttpServletResponse res) {
+        authService.logout(req, res, "default");
     }
 }
 ```
 
 ## Cookie Profiles
 
-For apps with multiple user types (staff, customers):
+For apps with multiple user types:
 
 ```yaml
 vigil:
   cookie:
-    secure: true
-    http-only: true
-    same-site: Lax
     profiles:
       staff:
-        access-token-name: staff_access_token
-        refresh-token-name: staff_refresh_token
+        access-token-name: staff_token
+        refresh-token-name: staff_refresh
       customer:
-        access-token-name: customer_access_token
-        refresh-token-name: customer_refresh_token
+        access-token-name: customer_token
+        refresh-token-name: customer_refresh
 ```
 
 ```java
-// Use specific profile
 cookieService.setAccessTokenCookie(response, token, "staff");
 cookieService.getAccessToken(request, "customer");
 ```
 
-## Custom Token TTL
+## Guest Sessions
 
-Override TTL for specific tokens:
-
-```java
-// Email verification token (24 hours)
-String token = tokenService.generateAccessToken(
-    TokenRequest.builder()
-        .subject(email)
-        .claim("purpose", "email-verification")
-        .accessTtl(Duration.ofHours(24))
-        .build());
-```
-
-## Security Features (Always On)
-
-| Feature | Why |
-|---------|-----|
-| Token blacklist | Real logout |
-| Brute-force protection | Credential stuffing defense |
-| Refresh token rotation | Stolen tokens expire immediately |
-| HttpOnly cookies | XSS protection |
-| Secure cookies | MITM protection |
-| SameSite=Lax | CSRF protection |
-
-## Configuration Reference
+For anonymous/guest users (e.g., checkout without account):
 
 ```yaml
 vigil:
-  jwt:
-    secret: ${JWT_SECRET}       # Required (32+ chars)
-    access-ttl: 15m             # Default
-    refresh-ttl: 7d             # Default
-
-  cookie:
-    secure: true                # Default
-    http-only: true             # Default
-    same-site: Lax              # Default
-    profiles:
-      default:
-        access-token-name: access_token
-        refresh-token-name: refresh_token
-
-  password:
-    strength: 12                # BCrypt cost (4-31)
-
-  protection:
-    max-attempts: 5
-    lock-duration: 15m
-
-  blacklist:
-    max-size: 10000
-    ttl: 24h
-
-  filter:
-    public-paths: []
-
-  tenant:
-    enabled: false
-    header-name: X-Tenant-ID
+  session:
+    enabled: true
+    cookie-name: guest_session
+    ttl: 30m
 ```
 
-## Testing
+Implement the provider:
 
 ```java
-@Import(VigilTestConfiguration.class)
-class MyControllerTest {
-    @Autowired VigilTokenService tokenService;
-    // All Vigil beans available with test defaults
+@Component
+public class GuestSessionProvider implements VigilSessionProvider<Guest> {
+
+    @Override
+    public Optional<Guest> findByToken(String token, UUID tenantId) {
+        return guestRepository.findBySessionToken(token);
+    }
+
+    @Override
+    public boolean isExpired(Guest guest) {
+        return guest.isExpired();
+    }
+
+    @Override
+    public String getPrincipal(Guest guest) {
+        return guest.getId().toString();
+    }
 }
 ```
 
-## Custom Blacklist Backend
+## Custom Security Context
 
-Default uses Caffeine (in-memory). For distributed deployments:
+Populate your app's security context after Vigil authenticates:
 
 ```java
-public class RedisBlacklistBackend implements VigilBlacklistBackend {
-    // Implement: blacklist(), isBlacklisted(), clear(), size()
+@Component
+public class UserContextPopulator implements VigilContextPopulator {
+
+    @Override
+    public void populate(HttpServletRequest request, VigilTokenClaims claims) {
+        UserContext.set(
+            claims.getString("userId").orElse(null),
+            claims.getString("role").orElse(null)
+        );
+    }
+
+    @Override
+    public void clear() {
+        UserContext.clear();
+    }
+}
+```
+
+Vigil auto-discovers all `VigilContextPopulator` beans and calls them after authentication.
+
+## Password Strength
+
+```java
+PasswordStrength strength = passwordService.strength("weak123");
+if (!strength.isAcceptable()) {
+    throw new ValidationException(strength.feedback());
 }
 
-@Bean
-public VigilBlacklistService blacklistService(RedisBlacklistBackend backend) {
-    return new VigilBlacklistService(backend);
-}
+String hash = passwordService.hash("StrongP@ss1!");
+boolean matches = passwordService.matches("StrongP@ss1!", hash);
+boolean needsUpgrade = passwordService.needsRehash(hash);
 ```
 
 ## Multi-Tenant
@@ -208,10 +177,72 @@ public VigilBlacklistService blacklistService(RedisBlacklistBackend backend) {
 vigil:
   tenant:
     enabled: true
+    header-name: X-Tenant-ID
 ```
 
 ```java
 UUID tenantId = VigilTenantContext.requireTenant();
+```
+
+## Password Reset
+
+```java
+// Generate reset token
+String token = resetTokenService.generate(user.getEmail());
+emailService.send(user.getEmail(), "Reset: " + frontendUrl + "?token=" + token);
+
+// Validate and consume (single-use)
+String email = resetTokenService.validateAndConsume(token);
+user.setPasswordHash(passwordService.hash(newPassword));
+authService.invalidateAllSessions(email);
+```
+
+## Configuration Reference
+
+```yaml
+vigil:
+  jwt:
+    secret: ${JWT_SECRET}       # Required (min 32 chars)
+    access-ttl: 15m
+    refresh-ttl: 7d
+    issuer: my-app              # Optional
+    audience: my-app            # Optional
+
+  cookie:
+    secure: true
+    http-only: true
+    same-site: Lax
+    profiles:
+      default:
+        access-token-name: access_token
+        refresh-token-name: refresh_token
+
+  password:
+    strength: 12                # BCrypt cost (4-31)
+
+  blacklist:
+    max-size: 10000
+    ttl: 24h
+
+  protection:
+    max-attempts: 5
+    lock-duration: 15m
+
+  session:
+    enabled: false
+    cookie-name: session_token
+    ttl: 30m
+
+  tenant:
+    enabled: false
+    header-name: X-Tenant-ID
+
+  filter:
+    public-paths: []
+    check-all-profiles: false   # Try all cookie profiles for tokens
+
+  reset:
+    ttl: 1h                     # Password reset token TTL
 ```
 
 ## License

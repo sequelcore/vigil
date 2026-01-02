@@ -3,14 +3,17 @@ package io.github.sequelcore.vigil.autoconfigure;
 import io.github.sequelcore.vigil.auth.VigilAuthService;
 import io.github.sequelcore.vigil.auth.VigilResetTokenService;
 import io.github.sequelcore.vigil.blacklist.VigilBlacklistService;
+import io.github.sequelcore.vigil.context.VigilContextPopulator;
 import io.github.sequelcore.vigil.core.cookie.VigilCookieService;
 import io.github.sequelcore.vigil.core.jwt.VigilTokenService;
 import io.github.sequelcore.vigil.core.password.VigilPasswordService;
+import io.github.sequelcore.vigil.filter.FilterConfig;
 import io.github.sequelcore.vigil.filter.VigilAuthenticationFilter;
 import io.github.sequelcore.vigil.protection.VigilProtectionService;
 import io.github.sequelcore.vigil.session.VigilSessionProvider;
 import io.github.sequelcore.vigil.session.VigilSessionService;
 import io.github.sequelcore.vigil.tenant.VigilTenantService;
+import java.util.List;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -169,6 +172,7 @@ public class VigilAutoConfiguration {
    * @param tenantService optional tenant service
    * @param sessionService optional session service
    * @param sessionProvider optional session provider (application-provided)
+   * @param contextPopulators list of context populators (auto-discovered)
    * @return configured authentication filter
    */
   @Bean
@@ -180,7 +184,10 @@ public class VigilAutoConfiguration {
       VigilBlacklistService blacklistService,
       @Nullable VigilTenantService tenantService,
       @Nullable VigilSessionService sessionService,
-      @Nullable VigilSessionProvider<?> sessionProvider) {
+      @Nullable VigilSessionProvider<?> sessionProvider,
+      List<VigilContextPopulator> contextPopulators) {
+    FilterConfig filterConfig =
+        new FilterConfig(properties.filter().publicPaths(), properties.filter().checkAllProfiles());
     return new VigilAuthenticationFilter(
         tokenService,
         cookieService,
@@ -188,6 +195,7 @@ public class VigilAutoConfiguration {
         tenantService,
         sessionService,
         sessionProvider,
-        properties.filter().publicPaths());
+        contextPopulators,
+        filterConfig);
   }
 }

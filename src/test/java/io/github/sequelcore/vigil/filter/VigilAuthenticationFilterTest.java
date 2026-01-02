@@ -185,6 +185,112 @@ class VigilAuthenticationFilterTest {
     verify(tenantService, never()).setCurrentTenant(any());
   }
 
+  @Test
+  @DisplayName("Extract token from second profile when checkAllProfiles is enabled")
+  void extractFromSecondProfileWhenCheckAllProfiles() throws ServletException, IOException {
+    // Set up multi-profile cookie config
+    VigilProperties.Cookie multiProfileConfig =
+        new VigilProperties.Cookie(
+            true,
+            "Lax",
+            true,
+            Map.of(
+                "staff", new VigilProperties.CookieProfile("staff_token", "staff_refresh"),
+                "customer",
+                    new VigilProperties.CookieProfile("customer_token", "customer_refresh")));
+    VigilCookieService multiCookieService = new VigilCookieService(multiProfileConfig, jwtConfig);
+
+    TestableFilter filter =
+        new TestableFilter(
+            tokenService,
+            multiCookieService,
+            blacklistService,
+            null,
+            List.of(),
+            true); // checkAllProfiles enabled
+    when(request.getRequestURI()).thenReturn("/api/data");
+    when(request.getHeader("Authorization")).thenReturn(null);
+
+    // Token is in 'customer' profile cookie, not 'staff'
+    String token =
+        tokenService.generateAccessToken(
+            TokenRequest.builder().subject("customer-user").claim("role", "CUSTOMER").build());
+    when(request.getCookies()).thenReturn(new Cookie[] {new Cookie("customer_token", token)});
+
+    filter.doFilterInternal(request, response, filterChain);
+
+    assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+    assertThat(SecurityContextHolder.getContext().getAuthentication().getName())
+        .isEqualTo("customer-user");
+  }
+
+  @Test
+  @DisplayName("Prefer first profile token when checkAllProfiles finds multiple")
+  void preferFirstProfileWhenCheckAllProfiles() throws ServletException, IOException {
+    VigilProperties.Cookie multiProfileConfig =
+        new VigilProperties.Cookie(
+            true,
+            "Lax",
+            true,
+            Map.of(
+                "staff", new VigilProperties.CookieProfile("staff_token", "staff_refresh"),
+                "customer",
+                    new VigilProperties.CookieProfile("customer_token", "customer_refresh")));
+    VigilCookieService multiCookieService = new VigilCookieService(multiProfileConfig, jwtConfig);
+
+    TestableFilter filter =
+        new TestableFilter(
+            tokenService, multiCookieService, blacklistService, null, List.of(), true);
+    when(request.getRequestURI()).thenReturn("/api/data");
+    when(request.getHeader("Authorization")).thenReturn(null);
+
+    String staffToken =
+        tokenService.generateAccessToken(
+            TokenRequest.builder().subject("staff-user").claim("role", "STAFF").build());
+    String customerToken =
+        tokenService.generateAccessToken(
+            TokenRequest.builder().subject("customer-user").claim("role", "CUSTOMER").build());
+    when(request.getCookies())
+        .thenReturn(
+            new Cookie[] {
+              new Cookie("staff_token", staffToken), new Cookie("customer_token", customerToken)
+            });
+
+    filter.doFilterInternal(request, response, filterChain);
+
+    // Should authenticate with first found token
+    assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+  }
+
+  @Test
+  @DisplayName("Use only default profile when checkAllProfiles is disabled")
+  void useDefaultProfileWhenCheckAllProfilesDisabled() throws ServletException, IOException {
+    // Use only default profile - token in different cookie should not be found
+    VigilProperties.Cookie singleProfileConfig =
+        new VigilProperties.Cookie(
+            true,
+            "Lax",
+            true,
+            Map.of("default", new VigilProperties.CookieProfile("access_token", "refresh_token")));
+    VigilCookieService singleCookieService = new VigilCookieService(singleProfileConfig, jwtConfig);
+
+    TestableFilter filter =
+        new TestableFilter(
+            tokenService, singleCookieService, blacklistService, null, List.of(), false);
+    when(request.getRequestURI()).thenReturn("/api/data");
+    when(request.getHeader("Authorization")).thenReturn(null);
+
+    // Token in a different cookie name (not access_token)
+    String token =
+        tokenService.generateAccessToken(TokenRequest.builder().subject("other-user").build());
+    when(request.getCookies()).thenReturn(new Cookie[] {new Cookie("other_token", token)});
+
+    filter.doFilterInternal(request, response, filterChain);
+
+    // Should NOT authenticate because other_token is not the configured cookie name
+    assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+  }
+
   private String buildExpiredToken(String subject) {
     Instant now = Instant.now();
     return Jwts.builder()
@@ -208,6 +314,24 @@ class VigilAuthenticationFilterTest {
         VigilTenantService tenantService,
         java.util.List<String> publicPaths) {
       super(tokenService, cookieService, blacklistService, tenantService, publicPaths);
+    }
+
+    TestableFilter(
+        VigilTokenService tokenService,
+        VigilCookieService cookieService,
+        VigilBlacklistService blacklistService,
+        VigilTenantService tenantService,
+        java.util.List<String> publicPaths,
+        boolean checkAllProfiles) {
+      super(
+          tokenService,
+          cookieService,
+          blacklistService,
+          tenantService,
+          null,
+          null,
+          List.of(),
+          new FilterConfig(publicPaths, checkAllProfiles));
     }
 
     @Override

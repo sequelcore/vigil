@@ -1,92 +1,87 @@
 # CLAUDE.md
 
-## Overview
+## Project
 
-**Vigil** - Opinionated JWT authentication for Spring Boot. Security by default, not by configuration.
-
-## Project Info
+**Vigil** - JWT authentication for Spring Boot. Security by default.
 
 | Field | Value |
 |-------|-------|
 | Group ID | io.github.sequelcore |
 | Artifact ID | vigil-spring-boot-starter |
-| Version | 1.0.0 |
-| Java | 21 LTS |
+| Version | 2.3.0 |
+| Java | 21 |
 | Spring Boot | 3.5.x |
 
 ## Commands
 
 ```bash
-./gradlew build              # Build
-./gradlew test               # Tests
+./gradlew build
+./gradlew test
 ./gradlew qualityCheck       # Spotless + Checkstyle + JaCoCo
-./gradlew spotlessApply      # Format code
+./gradlew spotlessApply
 ```
 
-## Architecture
+## Package Structure
 
 ```
-src/main/java/io/github/sequelcore/vigil/
-├── autoconfigure/     # Spring Boot auto-configuration
+io.github.sequelcore.vigil/
+├── autoconfigure/           # Spring Boot auto-configuration
+├── auth/                    # VigilAuthService, VigilResetTokenService
+├── blacklist/               # Token blacklist (Caffeine)
+├── context/                 # VigilContextPopulator interface
 ├── core/
-│   ├── jwt/           # Token generation, validation
-│   ├── password/      # BCrypt hashing
-│   └── cookie/        # Cookie management
-├── filter/            # JWT auth filter
-├── blacklist/         # Token blacklist (Caffeine)
-├── protection/        # Brute-force protection
-└── tenant/            # Multi-tenant context (optional)
+│   ├── cookie/              # VigilCookieService
+│   ├── jwt/                 # VigilTokenService, TokenRequest, VigilTokenClaims
+│   └── password/            # VigilPasswordService, PasswordStrength
+├── filter/                  # VigilAuthenticationFilter
+├── protection/              # VigilProtectionService (brute-force)
+├── session/                 # VigilSessionService, VigilSessionProvider
+└── tenant/                  # VigilTenantService, VigilTenantContext
 ```
 
-## Security Philosophy
+## Services
 
-**Enabled by default** (can't accidentally deploy insecure):
-- Auth filter
-- Token blacklist (for real logout)
-- Brute-force protection
-- HttpOnly, Secure, SameSite cookies
+| Service | Purpose |
+|---------|---------|
+| `VigilTokenService` | JWT generation, validation, refresh |
+| `VigilPasswordService` | BCrypt hashing, strength scoring, rehash detection |
+| `VigilCookieService` | HTTP-Only cookie management with profiles |
+| `VigilBlacklistService` | Token invalidation for logout |
+| `VigilProtectionService` | Brute-force prevention, account lockout |
+| `VigilAuthService` | High-level logout, refresh, session invalidation |
+| `VigilSessionService` | Guest session token management |
+| `VigilTenantService` | Multi-tenant header validation |
 
-**Configurable with ceilings** (NIST/OWASP limits):
-- Access TTL: default 15m, max 60m
-- Refresh TTL: default 7d, max 30d
-- BCrypt cost: default 12, min 10
+## Interfaces
 
-**Optional** (architecture-specific):
-- Multi-tenant support
-
-## Minimal Config
-
-```yaml
-vigil:
-  jwt:
-    secret: ${JWT_SECRET}
-  filter:
-    public-paths: [/auth/**, /public/**]
-```
+| Interface | Purpose |
+|-----------|---------|
+| `VigilSessionProvider<T>` | Application implements to enable guest sessions |
+| `VigilContextPopulator` | Application implements to populate custom security contexts |
+| `VigilBlacklistBackend` | Implement for Redis/DB blacklist storage |
 
 ## Code Standards
 
 - Google Java Format (Spotless)
-- Google Checkstyle
-- 80% coverage (JaCoCo)
-- Lombok: `@Getter`, `@Builder`, `@RequiredArgsConstructor`
-- Java Records for DTOs
-
-## Naming
-
-- Services: `Vigil{Function}Service`
-- Properties: `VigilProperties` with nested records
-- Filters: `Vigil{Purpose}Filter`
+- 80% test coverage (JaCoCo)
+- Javadoc on public APIs
 
 ## Publishing
 
-Maven Central via vanniktech plugin + Central Portal.
+Maven Central via GitHub Actions. Triggered by version tags.
+
+```bash
+# Publish new version
+git tag v2.3.0
+git push origin v2.3.0
+```
+
+Workflow: `.github/workflows/publish.yml`
+- Validates tag format (v*.*.*)
+- Builds and tests
+- Publishes to Maven Central
+- Creates GitHub release
 
 Secrets in Doppler (`sequel-core/prd`):
-- `MAVEN_USERNAME` / `MAVEN_PASSWORD`
-- `GPG_PRIVATE_KEY` / `GPG_PASSPHRASE`
-
-## Reference Projects
-
-- **SHRAD**: Multi-tenant JWT, cookie auth, BCrypt 12
-- **Quesoro**: Token blacklist, login protection, dual client support
+- `MAVEN_USERNAME` / `MAVEN_PASSWORD` - Central Portal token
+- `GPG_PRIVATE_KEY` / `GPG_PASSPHRASE` - Package signing
