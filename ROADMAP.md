@@ -25,12 +25,17 @@
 - `VigilAuthService` - High-level login/logout/refresh
 - `VigilResetTokenService` - Password reset tokens
 
-### v2.3.0 - Context Populator (Current)
+### v2.3.0 - Context Populator
 - `VigilContextPopulator` interface for custom security context population
 - `FilterConfig` for cleaner filter configuration
 - `checkAllProfiles` option to try all cookie profiles for token extraction
 - Auto-discovery of all `VigilContextPopulator` beans
 - Eliminates need to extend `VigilAuthenticationFilter`
+
+### v2.3.1 - Cleanup (Current)
+- Remove convenience constructors from `VigilAuthenticationFilter`
+- Single constructor with `FilterConfig` parameter
+- No dead code policy enforcement
 
 ## Planned
 

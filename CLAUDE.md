@@ -8,7 +8,7 @@
 |-------|-------|
 | Group ID | io.github.sequelcore |
 | Artifact ID | vigil-spring-boot-starter |
-| Version | 2.3.0 |
+| Version | 2.3.1 |
 | Java | 21 |
 | Spring Boot | 3.5.x |
 
@@ -72,8 +72,8 @@ Maven Central via GitHub Actions. Triggered by version tags.
 
 ```bash
 # Publish new version
-git tag v2.3.0
-git push origin v2.3.0
+git tag v2.3.1
+git push origin v2.3.1
 ```
 
 Workflow: `.github/workflows/publish.yml`

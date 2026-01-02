@@ -80,7 +80,11 @@ class VigilAuthenticationFilterTest {
   void skipPublicPaths() throws ServletException, IOException {
     TestableFilter filter =
         new TestableFilter(
-            tokenService, cookieService, blacklistService, null, List.of("/public/**"));
+            tokenService,
+            cookieService,
+            blacklistService,
+            null,
+            new FilterConfig(List.of("/public/**")));
     when(request.getRequestURI()).thenReturn("/public/health");
 
     filter.doFilterInternal(request, response, filterChain);
@@ -93,7 +97,8 @@ class VigilAuthenticationFilterTest {
   @DisplayName("Extract token from Authorization header and authenticate")
   void extractFromAuthorizationHeader() throws ServletException, IOException {
     TestableFilter filter =
-        new TestableFilter(tokenService, cookieService, blacklistService, null, List.of());
+        new TestableFilter(
+            tokenService, cookieService, blacklistService, null, new FilterConfig(List.of()));
     when(request.getRequestURI()).thenReturn("/api/data");
     String token =
         tokenService.generateAccessToken(
@@ -114,7 +119,8 @@ class VigilAuthenticationFilterTest {
   @DisplayName("Extract token from cookie when Authorization header missing")
   void extractFromCookie() throws ServletException, IOException {
     TestableFilter filter =
-        new TestableFilter(tokenService, cookieService, blacklistService, null, List.of());
+        new TestableFilter(
+            tokenService, cookieService, blacklistService, null, new FilterConfig(List.of()));
     when(request.getRequestURI()).thenReturn("/api/data");
     String token =
         tokenService.generateAccessToken(
@@ -133,7 +139,8 @@ class VigilAuthenticationFilterTest {
   @DisplayName("Handle expired token via callback and skip authentication")
   void handleExpiredToken() throws ServletException, IOException {
     TestableFilter filter =
-        new TestableFilter(tokenService, cookieService, blacklistService, null, List.of());
+        new TestableFilter(
+            tokenService, cookieService, blacklistService, null, new FilterConfig(List.of()));
     when(request.getRequestURI()).thenReturn("/api/data");
     String token = buildExpiredToken("expired-user");
     when(request.getHeader("Authorization")).thenReturn("Bearer " + token);
@@ -150,7 +157,8 @@ class VigilAuthenticationFilterTest {
   void handleBlacklistedToken() throws ServletException, IOException {
     when(blacklistService.isBlacklisted("black-token")).thenReturn(true);
     TestableFilter filter =
-        new TestableFilter(tokenService, cookieService, blacklistService, null, List.of());
+        new TestableFilter(
+            tokenService, cookieService, blacklistService, null, new FilterConfig(List.of()));
     when(request.getRequestURI()).thenReturn("/api/data");
     when(request.getHeader("Authorization")).thenReturn("Bearer black-token");
 
@@ -167,7 +175,12 @@ class VigilAuthenticationFilterTest {
     UUID headerTenant = UUID.randomUUID();
     UUID tokenTenant = UUID.randomUUID();
     TestableFilter filter =
-        new TestableFilter(tokenService, cookieService, blacklistService, tenantService, List.of());
+        new TestableFilter(
+            tokenService,
+            cookieService,
+            blacklistService,
+            tenantService,
+            new FilterConfig(List.of()));
     when(request.getRequestURI()).thenReturn("/api/data");
     String token =
         tokenService.generateAccessToken(
@@ -206,8 +219,7 @@ class VigilAuthenticationFilterTest {
             multiCookieService,
             blacklistService,
             null,
-            List.of(),
-            true); // checkAllProfiles enabled
+            new FilterConfig(List.of(), true));
     when(request.getRequestURI()).thenReturn("/api/data");
     when(request.getHeader("Authorization")).thenReturn(null);
 
@@ -240,7 +252,11 @@ class VigilAuthenticationFilterTest {
 
     TestableFilter filter =
         new TestableFilter(
-            tokenService, multiCookieService, blacklistService, null, List.of(), true);
+            tokenService,
+            multiCookieService,
+            blacklistService,
+            null,
+            new FilterConfig(List.of(), true));
     when(request.getRequestURI()).thenReturn("/api/data");
     when(request.getHeader("Authorization")).thenReturn(null);
 
@@ -276,7 +292,11 @@ class VigilAuthenticationFilterTest {
 
     TestableFilter filter =
         new TestableFilter(
-            tokenService, singleCookieService, blacklistService, null, List.of(), false);
+            tokenService,
+            singleCookieService,
+            blacklistService,
+            null,
+            new FilterConfig(List.of(), false));
     when(request.getRequestURI()).thenReturn("/api/data");
     when(request.getHeader("Authorization")).thenReturn(null);
 
@@ -312,17 +332,7 @@ class VigilAuthenticationFilterTest {
         VigilCookieService cookieService,
         VigilBlacklistService blacklistService,
         VigilTenantService tenantService,
-        java.util.List<String> publicPaths) {
-      super(tokenService, cookieService, blacklistService, tenantService, publicPaths);
-    }
-
-    TestableFilter(
-        VigilTokenService tokenService,
-        VigilCookieService cookieService,
-        VigilBlacklistService blacklistService,
-        VigilTenantService tenantService,
-        java.util.List<String> publicPaths,
-        boolean checkAllProfiles) {
+        FilterConfig filterConfig) {
       super(
           tokenService,
           cookieService,
@@ -331,7 +341,7 @@ class VigilAuthenticationFilterTest {
           null,
           null,
           List.of(),
-          new FilterConfig(publicPaths, checkAllProfiles));
+          filterConfig);
     }
 
     @Override

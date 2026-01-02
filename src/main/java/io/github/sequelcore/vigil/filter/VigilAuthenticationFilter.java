@@ -68,44 +68,6 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
     this.publicPathMatcher = new PathMatcher(filterConfig.publicPaths());
   }
 
-  /** Backwards-compatible constructor without context populators. */
-  public VigilAuthenticationFilter(
-      VigilTokenService tokenService,
-      VigilCookieService cookieService,
-      VigilBlacklistService blacklistService,
-      @Nullable VigilTenantService tenantService,
-      @Nullable VigilSessionService sessionService,
-      @Nullable VigilSessionProvider<?> sessionProvider,
-      List<String> publicPaths) {
-    this(
-        tokenService,
-        cookieService,
-        blacklistService,
-        tenantService,
-        sessionService,
-        sessionProvider,
-        List.of(),
-        new FilterConfig(publicPaths));
-  }
-
-  /** Backwards-compatible constructor without session support. */
-  public VigilAuthenticationFilter(
-      VigilTokenService tokenService,
-      VigilCookieService cookieService,
-      VigilBlacklistService blacklistService,
-      @Nullable VigilTenantService tenantService,
-      List<String> publicPaths) {
-    this(
-        tokenService,
-        cookieService,
-        blacklistService,
-        tenantService,
-        null,
-        null,
-        List.of(),
-        new FilterConfig(publicPaths));
-  }
-
   @Override
   protected void doFilterInternal(
       HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
