@@ -41,8 +41,8 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
   @Nullable private final VigilSessionService sessionService;
   @Nullable private final VigilSessionProvider<?> sessionProvider;
   private final List<VigilContextPopulator> contextPopulators;
-  private final FilterConfig filterConfig;
   private final PathMatcher publicPathMatcher;
+  private final ProfilePathMatcher profilePathMatcher;
 
   /** Creates a new authentication filter with all dependencies. */
   public VigilAuthenticationFilter(
@@ -64,8 +64,8 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
         contextPopulators.stream()
             .sorted(Comparator.comparingInt(VigilContextPopulator::getOrder))
             .toList();
-    this.filterConfig = filterConfig;
     this.publicPathMatcher = new PathMatcher(filterConfig.publicPaths());
+    this.profilePathMatcher = new ProfilePathMatcher(filterConfig.profilePaths());
   }
 
   @Override
@@ -85,7 +85,7 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
       }
 
       // Try JWT authentication first
-      Optional<String> tokenOpt = extractToken(request);
+      Optional<String> tokenOpt = extractToken(request, path);
 
       if (tokenOpt.isPresent()) {
         authenticatedClaims = authenticateJwt(request, response, tokenOpt.get());
@@ -261,7 +261,7 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
   }
 
   /** Extracts the JWT token from Authorization header or cookies. */
-  protected Optional<String> extractToken(HttpServletRequest request) {
+  protected Optional<String> extractToken(HttpServletRequest request, String path) {
     // Try Authorization header first (mobile/API clients)
     String authHeader = request.getHeader(AUTHORIZATION_HEADER);
     if (authHeader != null && authHeader.startsWith(BEARER_PREFIX)) {
@@ -272,16 +272,13 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
     }
 
     // Fall back to cookie (web clients)
-    if (filterConfig.checkAllProfiles()) {
-      for (String profile : cookieService.getProfileNames()) {
-        Optional<String> token = cookieService.getAccessToken(request, profile);
-        if (token.isPresent() && !token.get().isEmpty()) {
-          return token;
-        }
-      }
-      return Optional.empty();
+    // Use profile-paths mapping to determine which cookie to check
+    Optional<String> profile = profilePathMatcher.findProfile(path);
+    if (profile.isPresent()) {
+      return cookieService.getAccessToken(request, profile.get()).filter(t -> !t.isEmpty());
     }
 
+    // No profile mapping found, use default profile
     return cookieService.getAccessToken(request).filter(t -> !t.isEmpty());
   }
 

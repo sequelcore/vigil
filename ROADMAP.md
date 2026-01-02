@@ -28,18 +28,22 @@
 ### v2.3.0 - Context Populator
 - `VigilContextPopulator` interface for custom security context population
 - `FilterConfig` for cleaner filter configuration
-- `checkAllProfiles` option to try all cookie profiles for token extraction
 - Auto-discovery of all `VigilContextPopulator` beans
 - Eliminates need to extend `VigilAuthenticationFilter`
 
-### v2.3.1 - Cleanup (Current)
+### v2.3.1 - Cleanup
 - Remove convenience constructors from `VigilAuthenticationFilter`
 - Single constructor with `FilterConfig` parameter
-- No dead code policy enforcement
+
+### v2.4.0 - Profile Paths (Current)
+- Replace `checkAllProfiles` with explicit `profile-paths` mapping
+- Path-based cookie profile resolution
+- `ProfilePathMatcher` for request path → cookie profile mapping
+- Follows industry standard pattern (Spring Security, ASP.NET Core)
 
 ## Planned
 
-### v2.4.0 - Audit Events
+### v2.5.0 - Audit Events
 - `VigilAuthenticationSuccessEvent`
 - `VigilAuthenticationFailureEvent`
 - `VigilTokenBlacklistedEvent`

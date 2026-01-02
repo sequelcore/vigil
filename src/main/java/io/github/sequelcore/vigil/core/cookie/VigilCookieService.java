@@ -6,7 +6,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.Arrays;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * Service for managing authentication cookies with profile support.
@@ -122,15 +121,6 @@ public class VigilCookieService {
   public Optional<String> getRefreshToken(HttpServletRequest request) {
     var p = cookieConfig.getDefaultProfile();
     return getCookieValue(request, p.refreshTokenName());
-  }
-
-  /**
-   * Returns all configured profile names.
-   *
-   * @return set of profile names
-   */
-  public Set<String> getProfileNames() {
-    return cookieConfig.profiles().keySet();
   }
 
   // ==========================================================================

@@ -7,7 +7,7 @@ JWT authentication for Spring Boot. Security by default.
 ## Install
 
 ```kotlin
-implementation("io.github.sequelcore:vigil-spring-boot-starter:2.3.1")
+implementation("io.github.sequelcore:vigil-spring-boot-starter:2.4.0")
 ```
 
 ## Configure
@@ -77,9 +77,9 @@ public class AuthController {
 }
 ```
 
-## Cookie Profiles
+## Multi-Portal Authentication
 
-For apps with multiple user types:
+For apps with multiple user types (admin/customer, seller/buyer):
 
 ```yaml
 vigil:
@@ -91,12 +91,23 @@ vigil:
       customer:
         access-token-name: customer_token
         refresh-token-name: customer_refresh
+  filter:
+    profile-paths:
+      staff: /api/console/**
+      customer: /api/box/**
 ```
 
+Each portal has its own path namespace. The filter resolves which cookie to check based on the request path.
+
 ```java
+// Staff login → sets staff cookie
 cookieService.setAccessTokenCookie(response, token, "staff");
-cookieService.getAccessToken(request, "customer");
+
+// Customer login → sets customer cookie
+cookieService.setAccessTokenCookie(response, token, "customer");
 ```
+
+Requests to `/api/console/**` authenticate via `staff_token`. Requests to `/api/box/**` authenticate via `customer_token`. Same user can be logged into both portals simultaneously.
 
 ## Guest Sessions
 
@@ -239,7 +250,9 @@ vigil:
 
   filter:
     public-paths: []
-    check-all-profiles: false   # Try all cookie profiles for tokens
+    profile-paths:              # Path → cookie profile mapping
+      staff: /api/console/**
+      customer: /api/box/**
 
   reset:
     ttl: 1h                     # Password reset token TTL

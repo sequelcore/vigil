@@ -199,9 +199,8 @@ class VigilAuthenticationFilterTest {
   }
 
   @Test
-  @DisplayName("Extract token from second profile when checkAllProfiles is enabled")
-  void extractFromSecondProfileWhenCheckAllProfiles() throws ServletException, IOException {
-    // Set up multi-profile cookie config
+  @DisplayName("Use profile-paths to resolve cookie based on request path")
+  void useProfilePathsToResolveCookie() throws ServletException, IOException {
     VigilProperties.Cookie multiProfileConfig =
         new VigilProperties.Cookie(
             true,
@@ -213,21 +212,29 @@ class VigilAuthenticationFilterTest {
                     new VigilProperties.CookieProfile("customer_token", "customer_refresh")));
     VigilCookieService multiCookieService = new VigilCookieService(multiProfileConfig, jwtConfig);
 
+    // Map paths to profiles
+    Map<String, List<String>> profilePaths =
+        Map.of(
+            "staff", List.of("/api/console/**"),
+            "customer", List.of("/api/box/**"));
+
     TestableFilter filter =
         new TestableFilter(
             tokenService,
             multiCookieService,
             blacklistService,
             null,
-            new FilterConfig(List.of(), true));
-    when(request.getRequestURI()).thenReturn("/api/data");
+            new FilterConfig(List.of(), profilePaths));
+
+    // Request to /api/box/** should use customer cookie
+    when(request.getRequestURI()).thenReturn("/api/box/orders");
     when(request.getHeader("Authorization")).thenReturn(null);
 
-    // Token is in 'customer' profile cookie, not 'staff'
-    String token =
+    String customerToken =
         tokenService.generateAccessToken(
             TokenRequest.builder().subject("customer-user").claim("role", "CUSTOMER").build());
-    when(request.getCookies()).thenReturn(new Cookie[] {new Cookie("customer_token", token)});
+    when(request.getCookies())
+        .thenReturn(new Cookie[] {new Cookie("customer_token", customerToken)});
 
     filter.doFilterInternal(request, response, filterChain);
 
@@ -237,8 +244,8 @@ class VigilAuthenticationFilterTest {
   }
 
   @Test
-  @DisplayName("Prefer first profile token when checkAllProfiles finds multiple")
-  void preferFirstProfileWhenCheckAllProfiles() throws ServletException, IOException {
+  @DisplayName("Use staff cookie for console paths")
+  void useStaffCookieForConsolePaths() throws ServletException, IOException {
     VigilProperties.Cookie multiProfileConfig =
         new VigilProperties.Cookie(
             true,
@@ -250,38 +257,39 @@ class VigilAuthenticationFilterTest {
                     new VigilProperties.CookieProfile("customer_token", "customer_refresh")));
     VigilCookieService multiCookieService = new VigilCookieService(multiProfileConfig, jwtConfig);
 
+    Map<String, List<String>> profilePaths =
+        Map.of(
+            "staff", List.of("/api/console/**"),
+            "customer", List.of("/api/box/**"));
+
     TestableFilter filter =
         new TestableFilter(
             tokenService,
             multiCookieService,
             blacklistService,
             null,
-            new FilterConfig(List.of(), true));
-    when(request.getRequestURI()).thenReturn("/api/data");
+            new FilterConfig(List.of(), profilePaths));
+
+    // Request to /api/console/** should use staff cookie
+    when(request.getRequestURI()).thenReturn("/api/console/dashboard");
     when(request.getHeader("Authorization")).thenReturn(null);
 
     String staffToken =
         tokenService.generateAccessToken(
             TokenRequest.builder().subject("staff-user").claim("role", "STAFF").build());
-    String customerToken =
-        tokenService.generateAccessToken(
-            TokenRequest.builder().subject("customer-user").claim("role", "CUSTOMER").build());
-    when(request.getCookies())
-        .thenReturn(
-            new Cookie[] {
-              new Cookie("staff_token", staffToken), new Cookie("customer_token", customerToken)
-            });
+    when(request.getCookies()).thenReturn(new Cookie[] {new Cookie("staff_token", staffToken)});
 
     filter.doFilterInternal(request, response, filterChain);
 
-    // Should authenticate with first found token
     assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+    assertThat(SecurityContextHolder.getContext().getAuthentication().getName())
+        .isEqualTo("staff-user");
   }
 
   @Test
-  @DisplayName("Use only default profile when checkAllProfiles is disabled")
-  void useDefaultProfileWhenCheckAllProfilesDisabled() throws ServletException, IOException {
-    // Use only default profile - token in different cookie should not be found
+  @DisplayName("Use default profile when path has no mapping")
+  void useDefaultProfileWhenNoPathMapping() throws ServletException, IOException {
+    // Single profile config - this becomes the default
     VigilProperties.Cookie singleProfileConfig =
         new VigilProperties.Cookie(
             true,
@@ -290,25 +298,27 @@ class VigilAuthenticationFilterTest {
             Map.of("default", new VigilProperties.CookieProfile("access_token", "refresh_token")));
     VigilCookieService singleCookieService = new VigilCookieService(singleProfileConfig, jwtConfig);
 
+    // No path mappings - all paths use default profile
     TestableFilter filter =
         new TestableFilter(
             tokenService,
             singleCookieService,
             blacklistService,
             null,
-            new FilterConfig(List.of(), false));
-    when(request.getRequestURI()).thenReturn("/api/data");
+            new FilterConfig(List.of(), Map.of()));
+
+    when(request.getRequestURI()).thenReturn("/api/other");
     when(request.getHeader("Authorization")).thenReturn(null);
 
-    // Token in a different cookie name (not access_token)
     String token =
-        tokenService.generateAccessToken(TokenRequest.builder().subject("other-user").build());
-    when(request.getCookies()).thenReturn(new Cookie[] {new Cookie("other_token", token)});
+        tokenService.generateAccessToken(TokenRequest.builder().subject("default-user").build());
+    when(request.getCookies()).thenReturn(new Cookie[] {new Cookie("access_token", token)});
 
     filter.doFilterInternal(request, response, filterChain);
 
-    // Should NOT authenticate because other_token is not the configured cookie name
-    assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+    assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+    assertThat(SecurityContextHolder.getContext().getAuthentication().getName())
+        .isEqualTo("default-user");
   }
 
   private String buildExpiredToken(String subject) {
