@@ -152,4 +152,108 @@ class VigilAuthServiceTest {
     Optional<UUID> result = authService.getCurrentTenant();
     assertThat(result).isEmpty();
   }
+
+  @Test
+  @DisplayName("Login generates tokens and returns result")
+  void loginGeneratesTokensAndReturnsResult() {
+    AuthResult result =
+        authService.login(response, "test-user", "default", Map.of("role", "ADMIN"));
+
+    assertThat(result.accessToken()).isNotNull();
+    assertThat(result.refreshToken()).isNotNull();
+    assertThat(result.accessExpiresAt()).isNotNull();
+    assertThat(result.refreshExpiresAt()).isNotNull();
+    assertThat(result.claims().getSubject()).isEqualTo("test-user");
+    assertThat(result.claims().getString("role")).contains("ADMIN");
+  }
+
+  @Test
+  @DisplayName("Login with default profile")
+  void loginWithDefaultProfile() {
+    AuthResult result = authService.login(response, "test-user", Map.of("userId", "123"));
+
+    assertThat(result.accessToken()).isNotNull();
+    assertThat(result.claims().getSubject()).isEqualTo("test-user");
+    assertThat(result.claims().getString("userId")).contains("123");
+  }
+
+  @Test
+  @DisplayName("Login tokens are valid and can be validated")
+  void loginTokensAreValid() {
+    AuthResult result = authService.login(response, "test-user", "default", Map.of());
+
+    // Tokens should be valid
+    assertThat(tokenService.isTokenExpired(result.accessToken())).isFalse();
+    assertThat(tokenService.isTokenExpired(result.refreshToken())).isFalse();
+
+    // Claims should match
+    var claims = tokenService.validateAndGetClaims(result.accessToken());
+    assertThat(claims.getSubject()).isEqualTo("test-user");
+  }
+
+  @Test
+  @DisplayName("Login with profile only (no claims)")
+  void loginWithProfileOnly() {
+    AuthResult result = authService.login(response, "test-user", "default");
+
+    assertThat(result.accessToken()).isNotNull();
+    assertThat(result.claims().getSubject()).isEqualTo("test-user");
+  }
+
+  @Test
+  @DisplayName("Login with subject only (default profile, no claims)")
+  void loginWithSubjectOnly() {
+    AuthResult result = authService.login(response, "test-user");
+
+    assertThat(result.accessToken()).isNotNull();
+    assertThat(result.claims().getSubject()).isEqualTo("test-user");
+  }
+
+  @Test
+  @DisplayName("Login expiration times come from actual tokens")
+  void loginExpirationTimesFromTokens() {
+    AuthResult result = authService.login(response, "test-user", "default", Map.of());
+
+    // Expiration should match what's in the token
+    var accessClaims = tokenService.validateAndGetClaims(result.accessToken());
+    var refreshClaims = tokenService.validateAndGetClaims(result.refreshToken());
+
+    assertThat(result.accessExpiresAt()).isEqualTo(accessClaims.getExpiration().toInstant());
+    assertThat(result.refreshExpiresAt()).isEqualTo(refreshClaims.getExpiration().toInstant());
+  }
+
+  @Test
+  @DisplayName("Refresh with default profile")
+  void refreshWithDefaultProfile() {
+    String refreshToken =
+        tokenService.generateRefreshToken(
+            TokenRequest.builder().subject("test-user").claim("role", "USER").build());
+
+    when(request.getCookies()).thenReturn(new Cookie[] {new Cookie("refresh_token", refreshToken)});
+
+    AuthResult result = authService.refresh(request, response);
+
+    assertThat(result.accessToken()).isNotNull();
+    assertThat(result.claims().getSubject()).isEqualTo("test-user");
+  }
+
+  @Test
+  @DisplayName("Logout with default profile")
+  void logoutWithDefaultProfile() {
+    String accessToken =
+        tokenService.generateAccessToken(TokenRequest.builder().subject("test-user").build());
+    String refreshToken =
+        tokenService.generateRefreshToken(TokenRequest.builder().subject("test-user").build());
+
+    when(request.getCookies())
+        .thenReturn(
+            new Cookie[] {
+              new Cookie("access_token", accessToken), new Cookie("refresh_token", refreshToken)
+            });
+
+    authService.logout(request, response);
+
+    assertThat(blacklistService.isBlacklisted(accessToken)).isTrue();
+    assertThat(blacklistService.isBlacklisted(refreshToken)).isTrue();
+  }
 }

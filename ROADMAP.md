@@ -1,5 +1,15 @@
 # Vigil Roadmap
 
+## Scope
+
+Vigil handles **token lifecycle**, not **user lifecycle**.
+
+**In scope:** Token generation, validation, refresh, blacklisting, cookies, password hashing, request authentication.
+
+**Out of scope:** User storage, `UserDetailsService`, login endpoints, OAuth2 server, email/SMS.
+
+---
+
 ## Released
 
 ### v1.0.0 - Core
@@ -18,34 +28,37 @@
 - `VigilBlacklistBackend` interface
 - Test configuration
 
-### v2.2.0 - Complete Auth Solution
-- `VigilPasswordService` enhanced (strength scoring, rehash detection, common password check)
+### v2.2.0 - Password & Sessions
+- `VigilPasswordService` enhanced (strength scoring, rehash detection)
 - `VigilSessionService` - Guest session tokens
 - `VigilSessionProvider<T>` - Application implements for session lookup
-- `VigilAuthService` - High-level login/logout/refresh
+- `VigilAuthService` - Logout, refresh, session invalidation
 - `VigilResetTokenService` - Password reset tokens
 
 ### v2.3.0 - Context Populator
-- `VigilContextPopulator` interface for custom security context population
-- `FilterConfig` for cleaner filter configuration
+- `VigilContextPopulator` interface for custom security context
 - Auto-discovery of all `VigilContextPopulator` beans
 
 ### v2.4.0 - Profile Paths
-- Path-based cookie profile resolution via `profile-paths` config
+- Path-based cookie profile resolution via `profile-paths`
 - `ProfilePathMatcher` for request path → cookie profile mapping
 
-### v2.4.1 - Security Hardening
-- Cookie handling via Spring's `ResponseCookie` builder
-- RFC-compliant cookie formatting
+### v2.4.1 - Cookie Hardening
+- Spring `ResponseCookie` builder for RFC-compliant cookies
 
 ### v2.5.0 - Strict Filter (Current)
 - `VigilAuthenticationFilter` always auto-registered (no override)
 - Apps customize via `VigilContextPopulator` only
-- Opinionated: security libraries should not allow bypassing
+
+### v2.6.0 - Login Orchestration
+- `VigilAuthService.login()` - Generate tokens + set cookies in one call
+- Completes the auth lifecycle: login → refresh → logout
+
+---
 
 ## Planned
 
-### v2.6.0 - Audit Events
+### v2.7.0 - Audit Events
 - `VigilAuthenticationSuccessEvent`
 - `VigilAuthenticationFailureEvent`
 - `VigilTokenBlacklistedEvent`
@@ -55,15 +68,9 @@
 - Algorithm enforcement (reject `alg: none`)
 - Claims validation (`iss`, `aud`, `nbf`)
 - TTL ceilings (access max 60m, refresh max 30d)
-- Token sidejacking prevention (fingerprint binding)
+- Token fingerprint binding
 
 ### Future
 - Key rotation (`kid` header, JWKS)
 - Asymmetric keys (RS256, ES256)
 - Redis adapters for blacklist/protection
-
-## Non-Goals
-
-- OAuth2 server (use Spring Authorization Server)
-- User management (application domain)
-- Email/SMS sending (provider-specific)

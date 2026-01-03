@@ -4,6 +4,7 @@ import io.github.sequelcore.vigil.auth.VigilAuthException.AuthErrorCode;
 import io.github.sequelcore.vigil.blacklist.VigilBlacklistService;
 import io.github.sequelcore.vigil.core.cookie.VigilCookieService;
 import io.github.sequelcore.vigil.core.jwt.TokenRefreshResult;
+import io.github.sequelcore.vigil.core.jwt.TokenRequest;
 import io.github.sequelcore.vigil.core.jwt.VigilTokenClaims;
 import io.github.sequelcore.vigil.core.jwt.VigilTokenService;
 import io.github.sequelcore.vigil.tenant.VigilTenantContext;
@@ -23,26 +24,30 @@ import org.springframework.security.core.context.SecurityContextHolder;
 /**
  * High-level authentication operations.
  *
- * <p>Provides convenient methods that orchestrate token service, cookie service, and blacklist
- * service for common auth flows.
+ * <p>Orchestrates token service, cookie service, and blacklist service for the complete auth
+ * lifecycle: login, refresh, and logout.
  *
  * <p>Example usage:
  *
  * <pre>{@code
- * @PostMapping("/refresh")
- * public ResponseEntity<TokenResponse> refresh(
- *         HttpServletRequest request,
- *         HttpServletResponse response) {
- *     AuthResult result = authService.refresh(request, response, "staff");
- *     return ResponseEntity.ok(new TokenResponse(result));
+ * @PostMapping("/auth/login")
+ * public AuthResult login(@RequestBody LoginRequest req, HttpServletResponse response) {
+ *     User user = userRepository.findByEmail(req.email())
+ *         .filter(u -> passwordService.matches(req.password(), u.getPasswordHash()))
+ *         .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
+ *
+ *     return authService.login(response, user.getEmail(), "staff",
+ *         Map.of("userId", user.getId(), "roles", user.getRoles()));
  * }
  *
- * @PostMapping("/logout")
- * public ResponseEntity<Void> logout(
- *         HttpServletRequest request,
- *         HttpServletResponse response) {
+ * @PostMapping("/auth/refresh")
+ * public AuthResult refresh(HttpServletRequest request, HttpServletResponse response) {
+ *     return authService.refresh(request, response, "staff");
+ * }
+ *
+ * @PostMapping("/auth/logout")
+ * public void logout(HttpServletRequest request, HttpServletResponse response) {
  *     authService.logout(request, response, "staff");
- *     return ResponseEntity.ok().build();
  * }
  * }</pre>
  */
@@ -66,6 +71,89 @@ public class VigilAuthService {
     this.tokenService = tokenService;
     this.cookieService = cookieService;
     this.blacklistService = blacklistService;
+  }
+
+  /**
+   * Creates a new authenticated session.
+   *
+   * <p>Generates access and refresh tokens, sets HTTP-only cookies, and returns the result. The
+   * application is responsible for validating credentials before calling this method.
+   *
+   * @param response the HTTP response to set cookies on
+   * @param subject the token subject (typically user ID or email)
+   * @param profile the cookie profile (e.g., "staff", "customer", "default")
+   * @param claims additional claims to include in the tokens
+   * @return the tokens and their expiration times
+   */
+  public AuthResult login(
+      HttpServletResponse response, String subject, String profile, Map<String, Object> claims) {
+    TokenRequest request = TokenRequest.builder().subject(subject).claims(claims).build();
+
+    String accessToken = tokenService.generateAccessToken(request);
+    String refreshToken = tokenService.generateRefreshToken(request);
+
+    cookieService.setAccessTokenCookie(response, accessToken, profile);
+    cookieService.setRefreshTokenCookie(response, refreshToken, profile);
+
+    VigilTokenClaims accessClaims =
+        new VigilTokenClaims(tokenService.validateAndGetClaims(accessToken));
+    VigilTokenClaims refreshClaims =
+        new VigilTokenClaims(tokenService.validateAndGetClaims(refreshToken));
+
+    return new AuthResult(
+        accessToken,
+        refreshToken,
+        accessClaims.getExpiration(),
+        refreshClaims.getExpiration(),
+        accessClaims);
+  }
+
+  /**
+   * Creates a new authenticated session with a specific profile and no custom claims.
+   *
+   * @param response the HTTP response to set cookies on
+   * @param subject the token subject (typically user ID or email)
+   * @param profile the cookie profile (e.g., "staff", "customer", "default")
+   * @return the tokens and their expiration times
+   */
+  public AuthResult login(HttpServletResponse response, String subject, String profile) {
+    return login(response, subject, profile, Map.of());
+  }
+
+  /**
+   * Creates a new authenticated session using the default cookie profile.
+   *
+   * @param response the HTTP response to set cookies on
+   * @param subject the token subject (typically user ID or email)
+   * @param claims additional claims to include in the tokens
+   * @return the tokens and their expiration times
+   */
+  public AuthResult login(
+      HttpServletResponse response, String subject, Map<String, Object> claims) {
+    return login(response, subject, "default", claims);
+  }
+
+  /**
+   * Creates a new authenticated session using the default cookie profile and no custom claims.
+   *
+   * @param response the HTTP response to set cookies on
+   * @param subject the token subject (typically user ID or email)
+   * @return the tokens and their expiration times
+   */
+  public AuthResult login(HttpServletResponse response, String subject) {
+    return login(response, subject, "default", Map.of());
+  }
+
+  /**
+   * Refreshes tokens using the refresh token from cookies with the default profile.
+   *
+   * @param request the HTTP request
+   * @param response the HTTP response
+   * @return the new tokens and expiration times
+   * @throws VigilAuthException if refresh fails
+   */
+  public AuthResult refresh(HttpServletRequest request, HttpServletResponse response) {
+    return refresh(request, response, "default", null);
   }
 
   /**
@@ -149,6 +237,16 @@ public class VigilAuthService {
         result.accessExpiresAt(),
         result.refreshExpiresAt(),
         claims);
+  }
+
+  /**
+   * Logs out by blacklisting tokens and clearing cookies using the default profile.
+   *
+   * @param request the HTTP request
+   * @param response the HTTP response
+   */
+  public void logout(HttpServletRequest request, HttpServletResponse response) {
+    logout(request, response, "default");
   }
 
   /**

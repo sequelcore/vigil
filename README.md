@@ -4,6 +4,19 @@ JWT authentication for Spring Boot. Security by default.
 
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.sequelcore/vigil-spring-boot-starter.svg)](https://central.sonatype.com/artifact/io.github.sequelcore/vigil-spring-boot-starter)
 
+## Scope
+
+Vigil handles **token lifecycle**, not **user lifecycle**.
+
+| Vigil does | Application does |
+|------------|------------------|
+| Generate/validate/refresh tokens | Store/load users |
+| Manage HTTP-only cookies | Validate credentials |
+| Authenticate requests via filter | Define user model |
+| Blacklist tokens on logout | Implement login endpoint |
+
+Same pattern as Auth0/Okta starters.
+
 ## Install
 
 ```kotlin
@@ -29,57 +42,56 @@ vigil:
       - /public/**
 ```
 
-## Services
-
-| Service | Purpose |
-|---------|---------|
-| `VigilTokenService` | JWT generation, validation, refresh with rotation |
-| `VigilPasswordService` | BCrypt hashing, strength scoring, rehash detection |
-| `VigilCookieService` | HTTP-Only cookie management with profiles |
-| `VigilBlacklistService` | Token and subject invalidation |
-| `VigilProtectionService` | Brute-force prevention, account lockout |
-| `VigilAuthService` | High-level logout, refresh, session invalidation |
-| `VigilResetTokenService` | Single-use password reset tokens |
-| `VigilSessionService` | Guest/anonymous session tokens |
-| `VigilTenantService` | Multi-tenant context management |
-
-## Basic Usage
+## Usage
 
 ```java
 @RestController
 @RequiredArgsConstructor
 public class AuthController {
 
-    private final VigilTokenService tokenService;
-    private final VigilPasswordService passwordService;
-    private final VigilCookieService cookieService;
     private final VigilAuthService authService;
+    private final VigilPasswordService passwordService;
+    private final UserRepository userRepository;
 
-    @PostMapping("/login")
-    public void login(@RequestBody LoginRequest req, HttpServletResponse res) {
+    @PostMapping("/auth/login")
+    public AuthResult login(@RequestBody LoginRequest req, HttpServletResponse res) {
         User user = userRepository.findByEmail(req.email())
             .filter(u -> passwordService.matches(req.password(), u.getPasswordHash()))
             .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
 
-        String token = tokenService.generateAccessToken(
-            TokenRequest.builder()
-                .subject(user.getId().toString())
-                .claim("role", user.getRole())
-                .build());
-
-        cookieService.setAccessTokenCookie(res, token);
+        return authService.login(res, user.getEmail(),
+            Map.of("userId", user.getId(), "roles", user.getRoles()));
     }
 
-    @PostMapping("/logout")
+    @PostMapping("/auth/refresh")
+    public AuthResult refresh(HttpServletRequest req, HttpServletResponse res) {
+        return authService.refresh(req, res);
+    }
+
+    @PostMapping("/auth/logout")
     public void logout(HttpServletRequest req, HttpServletResponse res) {
-        authService.logout(req, res, "default");
+        authService.logout(req, res);
     }
 }
 ```
 
+## Services
+
+| Service | Purpose |
+|---------|---------|
+| `VigilAuthService` | Login, logout, refresh orchestration |
+| `VigilTokenService` | JWT generation, validation, refresh |
+| `VigilPasswordService` | BCrypt hashing, strength scoring |
+| `VigilCookieService` | HTTP-only cookie management |
+| `VigilBlacklistService` | Token and subject invalidation |
+| `VigilProtectionService` | Brute-force prevention |
+| `VigilResetTokenService` | Password reset tokens |
+| `VigilSessionService` | Guest session tokens |
+| `VigilTenantService` | Multi-tenant context |
+
 ## Multi-Portal Authentication
 
-For apps with multiple user types (admin/customer, seller/buyer):
+For apps with multiple user types (admin/customer):
 
 ```yaml
 vigil:
@@ -99,21 +111,19 @@ vigil:
         - /api/box/**
 ```
 
-Each portal has its own path namespace. The filter resolves which cookie to check based on the request path.
-
 ```java
-// Staff login → sets staff cookie
-cookieService.setAccessTokenCookie(response, token, "staff");
+// Staff login
+authService.login(response, user.getEmail(), "staff", claims);
 
-// Customer login → sets customer cookie
-cookieService.setAccessTokenCookie(response, token, "customer");
+// Customer login
+authService.login(response, user.getEmail(), "customer", claims);
 ```
 
-Requests to `/api/console/**` authenticate via `staff_token`. Requests to `/api/box/**` authenticate via `customer_token`. Same user can be logged into both portals simultaneously.
+Requests to `/api/console/**` use `staff_token`. Requests to `/api/box/**` use `customer_token`.
 
 ## Custom Security Context
 
-Populate your app's security context after Vigil authenticates:
+Populate app-specific context after authentication:
 
 ```java
 @Component
@@ -123,7 +133,7 @@ public class UserContextPopulator implements VigilContextPopulator {
     public void populate(HttpServletRequest request, VigilTokenClaims claims) {
         UserContext.set(
             claims.getString("userId").orElse(null),
-            claims.getString("role").orElse(null)
+            claims.getStringList("roles")
         );
     }
 
@@ -134,11 +144,32 @@ public class UserContextPopulator implements VigilContextPopulator {
 }
 ```
 
-Vigil auto-discovers all `VigilContextPopulator` beans and calls them after authentication. This is the only extension point - the filter itself cannot be replaced.
+## Password Strength
+
+```java
+PasswordStrength strength = passwordService.strength("weak123");
+if (!strength.isAcceptable()) {
+    throw new ValidationException(strength.feedback());
+}
+
+String hash = passwordService.hash("StrongP@ss1!");
+boolean matches = passwordService.matches("StrongP@ss1!", hash);
+```
+
+## Password Reset
+
+```java
+// Generate token
+String token = resetTokenService.generate(user.getEmail());
+emailService.send(user.getEmail(), "Reset: " + url + "?token=" + token);
+
+// Validate and consume (single-use)
+String email = resetTokenService.validateAndConsume(token);
+user.setPasswordHash(passwordService.hash(newPassword));
+authService.invalidateAllSessions(email);
+```
 
 ## Guest Sessions
-
-For anonymous/guest users (e.g., checkout without account):
 
 ```yaml
 vigil:
@@ -147,8 +178,6 @@ vigil:
     cookie-name: guest_session
     ttl: 30m
 ```
-
-Implement the provider:
 
 ```java
 @Component
@@ -171,19 +200,6 @@ public class GuestSessionProvider implements VigilSessionProvider<Guest> {
 }
 ```
 
-## Password Strength
-
-```java
-PasswordStrength strength = passwordService.strength("weak123");
-if (!strength.isAcceptable()) {
-    throw new ValidationException(strength.feedback());
-}
-
-String hash = passwordService.hash("StrongP@ss1!");
-boolean matches = passwordService.matches("StrongP@ss1!", hash);
-boolean needsUpgrade = passwordService.needsRehash(hash);
-```
-
 ## Multi-Tenant
 
 ```yaml
@@ -197,19 +213,6 @@ vigil:
 UUID tenantId = VigilTenantContext.requireTenant();
 ```
 
-## Password Reset
-
-```java
-// Generate reset token
-String token = resetTokenService.generate(user.getEmail());
-emailService.send(user.getEmail(), "Reset: " + frontendUrl + "?token=" + token);
-
-// Validate and consume (single-use)
-String email = resetTokenService.validateAndConsume(token);
-user.setPasswordHash(passwordService.hash(newPassword));
-authService.invalidateAllSessions(email);
-```
-
 ## Configuration Reference
 
 ```yaml
@@ -218,8 +221,8 @@ vigil:
     secret: ${JWT_SECRET}       # Required (min 32 chars)
     access-ttl: 15m
     refresh-ttl: 7d
-    issuer: my-app              # Optional
-    audience: my-app            # Optional
+    issuer: my-app
+    audience: my-app
 
   cookie:
     secure: true
@@ -252,14 +255,14 @@ vigil:
 
   filter:
     public-paths: []
-    profile-paths:              # Path → cookie profile mapping
+    profile-paths:
       staff:
         - /api/console/**
       customer:
         - /api/box/**
 
   reset:
-    ttl: 1h                     # Password reset token TTL
+    ttl: 1h
 ```
 
 ## License

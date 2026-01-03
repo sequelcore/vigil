@@ -8,9 +8,29 @@
 |-------|-------|
 | Group ID | io.github.sequelcore |
 | Artifact ID | vigil-spring-boot-starter |
-| Version | 2.4.1 |
+| Version | 2.5.0 |
 | Java | 21 |
 | Spring Boot | 3.5.x |
+
+## Scope
+
+Vigil handles **token lifecycle**, not **user lifecycle**.
+
+**What Vigil does:**
+- Token generation, validation, refresh, blacklisting
+- Password hashing and strength validation
+- HTTP-only cookie management
+- Request authentication via filter
+- Multi-tenant context
+- Guest sessions
+
+**What Vigil does NOT do:**
+- User storage or lookup
+- `UserDetailsService` implementation
+- Login/registration endpoints
+- Email/SMS sending
+
+This follows the same pattern as Auth0/Okta starters: validate tokens, delegate user management to the application.
 
 ## Commands
 
@@ -46,18 +66,41 @@ io.github.sequelcore.vigil/
 | `VigilTokenService` | JWT generation, validation, refresh |
 | `VigilPasswordService` | BCrypt hashing, strength scoring, rehash detection |
 | `VigilCookieService` | HTTP-Only cookie management with profiles |
-| `VigilBlacklistService` | Token invalidation for logout |
+| `VigilBlacklistService` | Token and subject invalidation |
 | `VigilProtectionService` | Brute-force prevention, account lockout |
-| `VigilAuthService` | High-level logout, refresh, session invalidation |
+| `VigilAuthService` | Login, logout, refresh orchestration |
 | `VigilSessionService` | Guest session token management |
 | `VigilTenantService` | Multi-tenant header validation |
+| `VigilResetTokenService` | Single-use password reset tokens |
+
+## VigilAuthService
+
+Central orchestration for auth operations:
+
+```java
+// Full control
+authService.login(response, subject, profile, claims);
+authService.refresh(request, response, profile);
+authService.logout(request, response, profile);
+
+// Default profile (single-portal apps)
+authService.login(response, subject, claims);
+authService.login(response, subject);
+authService.refresh(request, response);
+authService.logout(request, response);
+
+// Session management
+authService.invalidateAllSessions(subject);
+```
+
+The app validates credentials, Vigil handles token orchestration.
 
 ## Interfaces
 
 | Interface | Purpose |
 |-----------|---------|
-| `VigilSessionProvider<T>` | Application implements to enable guest sessions |
-| `VigilContextPopulator` | Application implements to populate custom security contexts |
+| `VigilSessionProvider<T>` | Application implements for guest session lookup |
+| `VigilContextPopulator` | Application implements for custom security context |
 | `VigilBlacklistBackend` | Implement for Redis/DB blacklist storage |
 
 ## Code Standards
@@ -71,17 +114,6 @@ io.github.sequelcore.vigil/
 Maven Central via GitHub Actions. Triggered by version tags.
 
 ```bash
-# Publish new version
 git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
-
-Workflow: `.github/workflows/publish.yml`
-- Validates tag format (v*.*.*)
-- Builds and tests
-- Publishes to Maven Central
-- Creates GitHub release
-
-Secrets in Doppler (`sequel-core/prd`):
-- `MAVEN_USERNAME` / `MAVEN_PASSWORD` - Central Portal token
-- `GPG_PRIVATE_KEY` / `GPG_PASSPHRASE` - Package signing
