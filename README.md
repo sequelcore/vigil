@@ -20,7 +20,7 @@ Same pattern as Auth0/Okta starters.
 ## Install
 
 ```kotlin
-implementation("io.github.sequelcore:vigil-spring-boot-starter:2.5.0")
+implementation("io.github.sequelcore:vigil-spring-boot-starter:2.6.0")
 ```
 
 ## Configure

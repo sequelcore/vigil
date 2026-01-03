@@ -46,11 +46,11 @@ Vigil handles **token lifecycle**, not **user lifecycle**.
 ### v2.4.1 - Cookie Hardening
 - Spring `ResponseCookie` builder for RFC-compliant cookies
 
-### v2.5.0 - Strict Filter (Current)
+### v2.5.0 - Strict Filter
 - `VigilAuthenticationFilter` always auto-registered (no override)
 - Apps customize via `VigilContextPopulator` only
 
-### v2.6.0 - Login Orchestration
+### v2.6.0 - Login Orchestration (Current)
 - `VigilAuthService.login()` - Generate tokens + set cookies in one call
 - Completes the auth lifecycle: login → refresh → logout
 
