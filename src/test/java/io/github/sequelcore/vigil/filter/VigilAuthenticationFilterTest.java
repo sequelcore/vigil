@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import io.github.sequelcore.vigil.autoconfigure.VigilProperties;
 import io.github.sequelcore.vigil.blacklist.VigilBlacklistService;
+import io.github.sequelcore.vigil.context.VigilContextPopulator;
 import io.github.sequelcore.vigil.core.cookie.VigilCookieService;
 import io.github.sequelcore.vigil.core.jwt.TokenRequest;
 import io.github.sequelcore.vigil.core.jwt.VigilTokenService;
@@ -190,12 +191,21 @@ class VigilAuthenticationFilterTest {
                 .build());
     when(request.getHeader("Authorization")).thenReturn("Bearer " + token);
     when(tenantService.extractTenantId(request)).thenReturn(java.util.Optional.of(headerTenant));
+    // Make the mock actually set the tenant context so mismatch can be detected
+    org.mockito.Mockito.doAnswer(
+            inv -> {
+              VigilTenantContext.setTenant(inv.getArgument(0));
+              return null;
+            })
+        .when(tenantService)
+        .setCurrentTenant(any());
 
     filter.doFilterInternal(request, response, filterChain);
 
     assertThat(filter.tenantMismatchCalled).isTrue();
     assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
-    verify(tenantService, never()).setCurrentTenant(any());
+    // Header tenant is set upfront, then mismatch is detected with token tenant
+    verify(tenantService, times(1)).setCurrentTenant(headerTenant);
   }
 
   @Test
@@ -319,6 +329,93 @@ class VigilAuthenticationFilterTest {
     assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
     assertThat(SecurityContextHolder.getContext().getAuthentication().getName())
         .isEqualTo("default-user");
+  }
+
+  @Test
+  @DisplayName("Public path should have tenant context when header present")
+  void publicPathWithTenantHeader() throws ServletException, IOException {
+    UUID tenantId = UUID.randomUUID();
+    when(tenantService.extractTenantId(request)).thenReturn(java.util.Optional.of(tenantId));
+    org.mockito.Mockito.doAnswer(
+            inv -> {
+              VigilTenantContext.setTenant(inv.getArgument(0));
+              return null;
+            })
+        .when(tenantService)
+        .setCurrentTenant(any());
+
+    // Capture the tenant context during filter chain execution
+    java.util.concurrent.atomic.AtomicReference<UUID> capturedTenant =
+        new java.util.concurrent.atomic.AtomicReference<>();
+    org.mockito.Mockito.doAnswer(
+            inv -> {
+              capturedTenant.set(VigilTenantContext.getTenant().orElse(null));
+              return null;
+            })
+        .when(filterChain)
+        .doFilter(any(), any());
+
+    TestableFilter filter =
+        new TestableFilter(
+            tokenService,
+            cookieService,
+            blacklistService,
+            tenantService,
+            new FilterConfig(List.of("/public/**")));
+    when(request.getRequestURI()).thenReturn("/public/login");
+
+    filter.doFilterInternal(request, response, filterChain);
+
+    verify(tenantService, times(1)).setCurrentTenant(tenantId);
+    // Tenant context was available during filter chain execution
+    assertThat(capturedTenant.get()).isEqualTo(tenantId);
+    verify(filterChain, times(1)).doFilter(request, response);
+  }
+
+  @Test
+  @DisplayName("Public path without tenant header should have empty context")
+  void publicPathWithoutTenantHeader() throws ServletException, IOException {
+    when(tenantService.extractTenantId(request)).thenReturn(java.util.Optional.empty());
+
+    TestableFilter filter =
+        new TestableFilter(
+            tokenService,
+            cookieService,
+            blacklistService,
+            tenantService,
+            new FilterConfig(List.of("/public/**")));
+    when(request.getRequestURI()).thenReturn("/public/health");
+
+    filter.doFilterInternal(request, response, filterChain);
+
+    verify(tenantService, never()).setCurrentTenant(any());
+    assertThat(VigilTenantContext.getTenant()).isEmpty();
+    verify(filterChain, times(1)).doFilter(request, response);
+  }
+
+  @Test
+  @DisplayName("Public path should call context populators with null claims")
+  void publicPathCallsPopulatorsWithNullClaims() throws ServletException, IOException {
+    VigilContextPopulator mockPopulator = org.mockito.Mockito.mock(VigilContextPopulator.class);
+    when(mockPopulator.getOrder()).thenReturn(0);
+
+    VigilAuthenticationFilter filter =
+        new VigilAuthenticationFilter(
+            tokenService,
+            cookieService,
+            blacklistService,
+            null,
+            null,
+            null,
+            List.of(mockPopulator),
+            new FilterConfig(List.of("/public/**")));
+    when(request.getRequestURI()).thenReturn("/public/login");
+
+    filter.doFilterInternal(request, response, filterChain);
+
+    verify(mockPopulator, times(1)).populate(request, null);
+    verify(mockPopulator, times(1)).clear();
+    verify(filterChain, times(1)).doFilter(request, response);
   }
 
   private String buildExpiredToken(String subject) {

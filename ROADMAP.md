@@ -50,9 +50,14 @@ Vigil handles **token lifecycle**, not **user lifecycle**.
 - `VigilAuthenticationFilter` always auto-registered (no override)
 - Apps customize via `VigilContextPopulator` only
 
-### v2.6.0 - Login Orchestration (Current)
+### v2.6.0 - Login Orchestration
 - `VigilAuthService.login()` - Generate tokens + set cookies in one call
 - Completes the auth lifecycle: login → refresh → logout
+
+### v2.6.1 - Public Path Tenant Context (Current)
+- Tenant context populated for public paths when `tenant.enabled=true`
+- `VigilContextPopulator.populate()` called for public paths with `claims=null`
+- Enables login/registration endpoints to access tenant context
 
 ---
 

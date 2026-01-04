@@ -9,7 +9,7 @@ plugins {
 }
 
 group = "io.github.sequelcore"
-version = "2.6.0"
+version = "2.6.1"
 
 java {
     toolchain {

@@ -78,8 +78,14 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
     try {
       String path = request.getRequestURI();
 
-      // Skip authentication for public paths
+      // Extract tenant context from header when enabled (before public path check)
+      if (tenantService != null) {
+        tenantService.extractTenantId(request).ifPresent(tenantService::setCurrentTenant);
+      }
+
+      // Skip authentication for public paths (but still populate contexts)
       if (isPublicPath(path)) {
+        populateContexts(request, null);
         filterChain.doFilter(request, response);
         return;
       }
@@ -188,14 +194,8 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
   private boolean authenticateSession(
       HttpServletRequest request, HttpServletResponse response, String sessionToken) {
 
-    // Extract tenant ID
-    UUID tenantId = null;
-    if (tenantService != null) {
-      tenantId = tenantService.extractTenantId(request).orElse(null);
-      if (tenantId != null) {
-        tenantService.setCurrentTenant(tenantId);
-      }
-    }
+    // Tenant already set at filter start, just get the value for session lookup
+    UUID tenantId = VigilTenantContext.getTenant().orElse(null);
 
     // Find session entity
     VigilSessionProvider<Object> provider = (VigilSessionProvider<Object>) sessionProvider;
@@ -244,16 +244,17 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
   private boolean handleTenantContext(
       HttpServletRequest request, HttpServletResponse response, VigilTokenClaims claims) {
 
-    Optional<UUID> headerTenant = tenantService.extractTenantId(request);
+    // Header tenant already set at filter start, now validate against token
+    Optional<UUID> headerTenant = VigilTenantContext.getTenant();
     Optional<UUID> tokenTenant = claims.getUuid("tenantId");
 
-    if (headerTenant.isPresent()) {
-      if (tokenTenant.isPresent() && !headerTenant.get().equals(tokenTenant.get())) {
+    if (headerTenant.isPresent() && tokenTenant.isPresent()) {
+      if (!headerTenant.get().equals(tokenTenant.get())) {
         onTenantMismatch(request, response, headerTenant.get(), tokenTenant.get());
         return false;
       }
-      tenantService.setCurrentTenant(headerTenant.get());
     } else if (tokenTenant.isPresent()) {
+      // No header tenant, use token tenant
       tenantService.setCurrentTenant(tokenTenant.get());
     }
 
