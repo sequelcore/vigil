@@ -5,6 +5,7 @@ import io.github.sequelcore.vigil.blacklist.VigilBlacklistService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.JwtParserBuilder;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
@@ -153,13 +154,27 @@ public class VigilTokenService {
   /**
    * Validates a token and returns its claims.
    *
+   * <p>Per RFC 8725bis, validates issuer and audience if configured.
+   *
    * @param token the JWT token
    * @return the token claims
    * @throws ExpiredJwtException if expired
    * @throws JwtException if invalid
    */
   public Claims validateAndGetClaims(String token) {
-    return Jwts.parser().verifyWith(signingKey).build().parseSignedClaims(token).getPayload();
+    JwtParserBuilder parserBuilder = Jwts.parser().verifyWith(signingKey);
+
+    // RFC 8725bis: Validate issuer if configured
+    if (jwtConfig.issuer() != null && !jwtConfig.issuer().isEmpty()) {
+      parserBuilder.requireIssuer(jwtConfig.issuer());
+    }
+
+    // RFC 8725bis: Validate audience if configured
+    if (jwtConfig.audience() != null && !jwtConfig.audience().isEmpty()) {
+      parserBuilder.requireAudience(jwtConfig.audience());
+    }
+
+    return parserBuilder.build().parseSignedClaims(token).getPayload();
   }
 
   /**
@@ -209,6 +224,7 @@ public class VigilTokenService {
         Jwts.builder()
             .subject(request.subject())
             .issuedAt(Date.from(now))
+            .notBefore(Date.from(now)) // RFC 8725bis: prevent token usage before issued time
             .expiration(Date.from(expiration));
 
     if (jwtConfig.issuer() != null) {

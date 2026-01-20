@@ -20,7 +20,7 @@ Same pattern as Auth0/Okta starters.
 ## Install
 
 ```kotlin
-implementation("io.github.sequelcore:vigil-spring-boot-starter:2.7.0")
+implementation("io.github.sequelcore:vigil-spring-boot-starter:3.0.0")
 ```
 
 ## Configure
@@ -219,11 +219,11 @@ UUID tenantId = VigilTenantContext.requireTenant();
 ```yaml
 vigil:
   jwt:
-    secret: ${JWT_SECRET}       # Required (min 32 chars recommended)
+    secret: ${JWT_SECRET}       # Required (min 32 chars enforced per RFC 8725bis)
     access-ttl: 15m
     refresh-ttl: 7d
-    issuer: my-app
-    audience: my-app
+    issuer: my-app              # Validated when configured (RFC 8725bis)
+    audience: my-app            # Validated when configured (RFC 8725bis)
 
   auth:
     realm: my-app               # WWW-Authenticate realm (RFC 6750)

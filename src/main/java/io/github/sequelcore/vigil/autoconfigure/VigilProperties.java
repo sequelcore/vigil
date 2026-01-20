@@ -86,7 +86,7 @@ public record VigilProperties(
   /**
    * JWT token configuration.
    *
-   * @param secret the signing secret (minimum 32 characters)
+   * @param secret the signing secret (minimum 32 characters per RFC 8725bis)
    * @param accessTtl access token time-to-live
    * @param refreshTtl refresh token time-to-live
    * @param issuer optional token issuer claim
@@ -99,7 +99,7 @@ public record VigilProperties(
       String issuer,
       String audience) {
     /**
-     * Applies defaults when TTL values are not provided.
+     * Applies defaults and validates configuration.
      *
      * @param secret the signing secret
      * @param accessTtl access token time-to-live
@@ -108,6 +108,13 @@ public record VigilProperties(
      * @param audience optional token audience claim
      */
     public Jwt {
+      // RFC 8725bis: Minimum 256 bits (32 bytes) for HMAC-SHA algorithms
+      if (secret != null && secret.length() < 32) {
+        throw new IllegalArgumentException(
+            "JWT secret must be at least 32 characters (256 bits) per RFC 8725bis. Current length: "
+                + secret.length());
+      }
+
       if (accessTtl == null) {
         accessTtl = Duration.ofMinutes(15);
       }

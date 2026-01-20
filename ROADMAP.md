@@ -70,7 +70,7 @@ Vigil handles **token lifecycle**, not **user lifecycle**.
 - `VigilContextPopulator.populate()` called for public paths with `claims=null`
 - Enables login/registration endpoints to access tenant context
 
-### v2.7.0 - RFC 6750 Compliance (Current)
+### v2.7.0 - RFC 6750 Compliance
 - `VigilAuthenticationEntryPoint` with `WWW-Authenticate` header
 - Error codes per RFC 6750 Section 3:
   - No token → `Bearer realm="app"` (no error code)
@@ -80,23 +80,19 @@ Vigil handles **token lifecycle**, not **user lifecycle**.
 - Configurable realm via `vigil.auth.realm`
 - Filter hooks propagate error info to entry point
 
----
-
-## Planned
-
-### v3.0.0 - RFC 8725bis Compliance
-
-**Goal:** Full compliance with JWT Best Current Practices (2025 draft).
-
-Features:
+### v3.0.0 - RFC 8725bis Compliance (Current)
 - **Secret key validation** - Minimum 32 characters (256 bits) enforced at startup
 - **Claims validation** - `iss` and `aud` validated when configured
-- **Algorithm allowlist** - Explicit algorithm configuration, reject unsigned tokens
-- **`nbf` (not before) validation** - Reject tokens used before their valid time
+- **Algorithm security** - HMAC-SHA256 enforced by jjwt (no `alg:none`)
+- **`nbf` (not before) claim** - Generated and validated automatically
 
 Breaking changes:
 - Apps with secrets < 32 chars will fail at startup
-- Apps relying on `iss`/`aud` generation without validation must update
+- Tokens from other issuers/audiences rejected when `iss`/`aud` configured
+
+---
+
+## Planned
 
 ---
 
