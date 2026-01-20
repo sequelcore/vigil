@@ -155,6 +155,13 @@ vigil:
 Maven Central via GitHub Actions. Triggered by version tags.
 
 ```bash
+# 1. Update version in build.gradle.kts
+version = "X.Y.Z"
+
+# 2. Commit, tag, and push
+git add build.gradle.kts
+git commit -m "chore: bump version to X.Y.Z"
+git push origin main
 git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
