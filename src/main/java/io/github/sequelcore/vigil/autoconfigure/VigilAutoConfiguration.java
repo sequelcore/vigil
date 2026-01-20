@@ -1,5 +1,6 @@
 package io.github.sequelcore.vigil.autoconfigure;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.sequelcore.vigil.auth.VigilAuthService;
 import io.github.sequelcore.vigil.auth.VigilResetTokenService;
 import io.github.sequelcore.vigil.blacklist.VigilBlacklistService;
@@ -7,6 +8,7 @@ import io.github.sequelcore.vigil.context.VigilContextPopulator;
 import io.github.sequelcore.vigil.core.cookie.VigilCookieService;
 import io.github.sequelcore.vigil.core.jwt.VigilTokenService;
 import io.github.sequelcore.vigil.core.password.VigilPasswordService;
+import io.github.sequelcore.vigil.entrypoint.VigilAuthenticationEntryPoint;
 import io.github.sequelcore.vigil.filter.FilterConfig;
 import io.github.sequelcore.vigil.filter.VigilAuthenticationFilter;
 import io.github.sequelcore.vigil.protection.VigilProtectionService;
@@ -20,6 +22,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.lang.Nullable;
+import org.springframework.security.web.AuthenticationEntryPoint;
 
 /**
  * Auto-configuration for the Vigil authentication starter.
@@ -160,6 +163,20 @@ public class VigilAutoConfiguration {
   public VigilSessionService vigilSessionService(
       VigilCookieService cookieService, VigilProperties properties) {
     return new VigilSessionService(cookieService, properties.session());
+  }
+
+  /**
+   * Creates the RFC 6750 compliant authentication entry point.
+   *
+   * @param properties the loaded Vigil properties
+   * @param objectMapper JSON object mapper
+   * @return configured authentication entry point
+   */
+  @Bean
+  @ConditionalOnMissingBean(AuthenticationEntryPoint.class)
+  public VigilAuthenticationEntryPoint vigilAuthenticationEntryPoint(
+      VigilProperties properties, ObjectMapper objectMapper) {
+    return new VigilAuthenticationEntryPoint(properties.auth().realm(), objectMapper);
   }
 
   /**

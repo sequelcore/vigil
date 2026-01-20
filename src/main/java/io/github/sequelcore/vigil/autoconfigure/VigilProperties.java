@@ -20,6 +20,7 @@ import org.springframework.validation.annotation.Validated;
  * @param filter authentication filter configuration
  * @param session session authentication configuration
  * @param reset password reset configuration
+ * @param auth authentication behavior configuration
  */
 @ConfigurationProperties(prefix = "vigil")
 @Validated
@@ -32,7 +33,8 @@ public record VigilProperties(
     Protection protection,
     Filter filter,
     Session session,
-    Reset reset) {
+    Reset reset,
+    Auth auth) {
 
   /**
    * Applies defaults when configuration sections are omitted.
@@ -46,6 +48,7 @@ public record VigilProperties(
    * @param filter authentication filter configuration (nullable)
    * @param session session authentication configuration (nullable)
    * @param reset password reset configuration (nullable)
+   * @param auth authentication behavior configuration (nullable)
    */
   public VigilProperties {
     if (jwt == null) {
@@ -74,6 +77,9 @@ public record VigilProperties(
     }
     if (reset == null) {
       reset = new Reset(Duration.ofHours(1));
+    }
+    if (auth == null) {
+      auth = new Auth(null);
     }
   }
 
@@ -342,6 +348,24 @@ public record VigilProperties(
     public Reset {
       if (ttl == null) {
         ttl = Duration.ofHours(1);
+      }
+    }
+  }
+
+  /**
+   * Authentication behavior configuration.
+   *
+   * @param realm the realm name for WWW-Authenticate header (RFC 6750)
+   */
+  public record Auth(String realm) {
+    /**
+     * Applies defaults.
+     *
+     * @param realm the realm name
+     */
+    public Auth {
+      if (realm == null || realm.isEmpty()) {
+        realm = "app";
       }
     }
   }

@@ -311,20 +311,37 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
   protected void onAuthenticationSuccess(
       HttpServletRequest request, HttpServletResponse response, VigilTokenClaims claims) {}
 
-  /** Called when no token is present in the request. */
-  protected void onMissingToken(HttpServletRequest request, HttpServletResponse response) {}
+  /**
+   * Called when no token is present in the request.
+   *
+   * <p>Per RFC 6750, no error code should be set when the request lacks authentication information.
+   */
+  protected void onMissingToken(HttpServletRequest request, HttpServletResponse response) {
+    // No error code per RFC 6750 Section 3:
+    // "If the request lacks any authentication information...
+    // the resource server SHOULD NOT include an error code"
+  }
 
   /** Called when the token has expired. */
   protected void onExpiredToken(
-      HttpServletRequest request, HttpServletResponse response, String token) {}
+      HttpServletRequest request, HttpServletResponse response, String token) {
+    request.setAttribute("vigil.error.code", "invalid_token");
+    request.setAttribute("vigil.error.description", "The access token has expired");
+  }
 
   /** Called when the token is invalid. */
   protected void onInvalidToken(
-      HttpServletRequest request, HttpServletResponse response, String token, JwtException e) {}
+      HttpServletRequest request, HttpServletResponse response, String token, JwtException e) {
+    request.setAttribute("vigil.error.code", "invalid_token");
+    request.setAttribute("vigil.error.description", e.getMessage());
+  }
 
   /** Called when the token is blacklisted. */
   protected void onBlacklistedToken(
-      HttpServletRequest request, HttpServletResponse response, String token) {}
+      HttpServletRequest request, HttpServletResponse response, String token) {
+    request.setAttribute("vigil.error.code", "invalid_token");
+    request.setAttribute("vigil.error.description", "Token has been revoked");
+  }
 
   /** Called when tenant ID in header doesn't match token. */
   protected void onTenantMismatch(

@@ -8,7 +8,7 @@
 |-------|-------|
 | Group ID | io.github.sequelcore |
 | Artifact ID | vigil-spring-boot-starter |
-| Version | 2.6.1 |
+| Version | 2.7.0 |
 | Java | 21 |
 | Spring Boot | 3.5.x |
 
@@ -53,6 +53,7 @@ io.github.sequelcore.vigil/
 │   ├── cookie/              # VigilCookieService
 │   ├── jwt/                 # VigilTokenService, TokenRequest, VigilTokenClaims
 │   └── password/            # VigilPasswordService, PasswordStrength
+├── entrypoint/              # VigilAuthenticationEntryPoint (RFC 6750)
 ├── filter/                  # VigilAuthenticationFilter
 ├── protection/              # VigilProtectionService (brute-force)
 ├── session/                 # VigilSessionService, VigilSessionProvider
@@ -72,6 +73,7 @@ io.github.sequelcore.vigil/
 | `VigilSessionService` | Guest session token management |
 | `VigilTenantService` | Multi-tenant header validation |
 | `VigilResetTokenService` | Single-use password reset tokens |
+| `VigilAuthenticationEntryPoint` | RFC 6750 compliant 401 responses |
 
 ## VigilAuthService
 
@@ -102,6 +104,45 @@ The app validates credentials, Vigil handles token orchestration.
 | `VigilSessionProvider<T>` | Application implements for guest session lookup |
 | `VigilContextPopulator` | Application implements for custom security context |
 | `VigilBlacklistBackend` | Implement for Redis/DB blacklist storage |
+
+## Configuration
+
+```yaml
+vigil:
+  jwt:
+    secret: your-256-bit-secret-key-here
+    access-ttl: 15m
+    refresh-ttl: 7d
+    issuer: your-app-name    # Optional
+    audience: your-audience  # Optional
+
+  auth:
+    realm: your-app-name     # For WWW-Authenticate header (RFC 6750)
+
+  cookie:
+    secure: true
+    http-only: true
+    same-site: Lax
+    profiles:
+      staff:
+        access-token-name: staff_access_token
+        refresh-token-name: staff_refresh_token
+
+  filter:
+    public-paths:
+      - /api/auth/login
+      - /api/auth/register
+    profile-paths:
+      staff: ["/api/admin/**", "/api/staff/**"]
+      customer: ["/api/customer/**"]
+
+  tenant:
+    enabled: false
+    header-name: X-Tenant-ID
+
+  session:
+    enabled: false
+```
 
 ## Code Standards
 
