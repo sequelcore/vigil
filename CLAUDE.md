@@ -8,7 +8,7 @@
 |-------|-------|
 | Group ID | io.github.sequelcore |
 | Artifact ID | vigil-spring-boot-starter |
-| Version | 3.0.0 |
+| Version | 3.1.0 |
 | Java | 21 |
 | Spring Boot | 3.5.x |
 
@@ -19,7 +19,8 @@ Vigil handles **token lifecycle**, not **user lifecycle**.
 **What Vigil does:**
 - Token generation, validation, refresh, blacklisting
 - Password hashing and strength validation
-- HTTP-only cookie management
+- HTTP-only cookie management (web clients)
+- Bearer token support (native apps, APIs)
 - Request authentication via filter
 - Multi-tenant context
 - Guest sessions
@@ -77,7 +78,9 @@ io.github.sequelcore.vigil/
 
 ## VigilAuthService
 
-Central orchestration for auth operations:
+Central orchestration for auth operations. Supports two client types:
+
+### Web Clients (SPAs) - Cookie-based
 
 ```java
 // Full control
@@ -85,13 +88,30 @@ authService.login(response, subject, profile, claims);
 authService.refresh(request, response, profile);
 authService.logout(request, response, profile);
 
-// Default profile (single-portal apps)
+// Default profile
 authService.login(response, subject, claims);
-authService.login(response, subject);
 authService.refresh(request, response);
 authService.logout(request, response);
+```
 
-// Session management
+### Native Apps & APIs (RFC 6749) - Token-based
+
+```java
+// Login returns tokens in response body
+authService.login(subject, claims);
+authService.login(subject);
+
+// Refresh with raw token
+authService.refresh(refreshToken);
+authService.refresh(refreshToken, updatedClaims);
+
+// Logout with raw tokens
+authService.logout(accessToken, refreshToken);
+```
+
+### Session Management
+
+```java
 authService.invalidateAllSessions(subject);
 ```
 

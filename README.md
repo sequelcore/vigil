@@ -20,7 +20,7 @@ Same pattern as Auth0/Okta starters.
 ## Install
 
 ```kotlin
-implementation("io.github.sequelcore:vigil-spring-boot-starter:3.0.0")
+implementation("io.github.sequelcore:vigil-spring-boot-starter:3.1.0")
 ```
 
 ## Configure
@@ -43,6 +43,10 @@ vigil:
 ```
 
 ## Usage
+
+### Web Clients (SPAs)
+
+Tokens stored in HTTP-only cookies. Automatic CSRF protection via SameSite.
 
 ```java
 @RestController
@@ -71,6 +75,41 @@ public class AuthController {
     @PostMapping("/auth/logout")
     public void logout(HttpServletRequest req, HttpServletResponse res) {
         authService.logout(req, res);
+    }
+}
+```
+
+### Native Apps & APIs (RFC 6749)
+
+Tokens returned in response body. Client stores in Keychain/Keystore.
+
+```java
+@RestController
+@RequiredArgsConstructor
+public class MobileAuthController {
+
+    private final VigilAuthService authService;
+    private final VigilPasswordService passwordService;
+    private final UserRepository userRepository;
+
+    @PostMapping("/auth/login")
+    public AuthResult login(@RequestBody LoginRequest req) {
+        User user = userRepository.findByEmail(req.email())
+            .filter(u -> passwordService.matches(req.password(), u.getPasswordHash()))
+            .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
+
+        return authService.login(user.getEmail(),
+            Map.of("userId", user.getId(), "roles", user.getRoles()));
+    }
+
+    @PostMapping("/auth/refresh")
+    public AuthResult refresh(@RequestBody RefreshRequest req) {
+        return authService.refresh(req.refreshToken());
+    }
+
+    @PostMapping("/auth/logout")
+    public void logout(@RequestBody LogoutRequest req) {
+        authService.logout(req.accessToken(), req.refreshToken());
     }
 }
 ```
@@ -219,7 +258,7 @@ UUID tenantId = VigilTenantContext.requireTenant();
 ```yaml
 vigil:
   jwt:
-    secret: ${JWT_SECRET}       # Required (min 32 chars enforced per RFC 8725bis)
+    secret: ${JWT_SECRET}       # Required (min 32 chars per RFC 8725bis)
     access-ttl: 15m
     refresh-ttl: 7d
     issuer: my-app              # Validated when configured (RFC 8725bis)

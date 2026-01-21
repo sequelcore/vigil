@@ -27,7 +27,14 @@ import org.springframework.security.core.context.SecurityContextHolder;
  * <p>Orchestrates token service, cookie service, and blacklist service for the complete auth
  * lifecycle: login, refresh, and logout.
  *
- * <p>Example usage:
+ * <p>Supports two client types:
+ *
+ * <ul>
+ *   <li><b>Web SPAs</b> - Use cookie-based methods with HttpServletRequest/Response
+ *   <li><b>Native apps &amp; APIs</b> - Use token-based methods with raw token strings (RFC 6749)
+ * </ul>
+ *
+ * <p>Example usage for web clients:
  *
  * <pre>{@code
  * @PostMapping("/auth/login")
@@ -48,6 +55,30 @@ import org.springframework.security.core.context.SecurityContextHolder;
  * @PostMapping("/auth/logout")
  * public void logout(HttpServletRequest request, HttpServletResponse response) {
  *     authService.logout(request, response, "staff");
+ * }
+ * }</pre>
+ *
+ * <p>Example usage for native apps (RFC 6749):
+ *
+ * <pre>{@code
+ * @PostMapping("/auth/login")
+ * public AuthResult login(@RequestBody LoginRequest req) {
+ *     User user = userRepository.findByEmail(req.email())
+ *         .filter(u -> passwordService.matches(req.password(), u.getPasswordHash()))
+ *         .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
+ *
+ *     return authService.login(user.getEmail(),
+ *         Map.of("userId", user.getId(), "roles", user.getRoles()));
+ * }
+ *
+ * @PostMapping("/auth/refresh")
+ * public AuthResult refresh(@RequestBody RefreshRequest req) {
+ *     return authService.refresh(req.refreshToken());
+ * }
+ *
+ * @PostMapping("/auth/logout")
+ * public void logout(@RequestBody LogoutRequest req) {
+ *     authService.logout(req.accessToken(), req.refreshToken());
  * }
  * }</pre>
  */
@@ -87,25 +118,12 @@ public class VigilAuthService {
    */
   public AuthResult login(
       HttpServletResponse response, String subject, String profile, Map<String, Object> claims) {
-    TokenRequest request = TokenRequest.builder().subject(subject).claims(claims).build();
+    AuthResult result = loginInternal(subject, claims);
 
-    String accessToken = tokenService.generateAccessToken(request);
-    String refreshToken = tokenService.generateRefreshToken(request);
+    cookieService.setAccessTokenCookie(response, result.accessToken(), profile);
+    cookieService.setRefreshTokenCookie(response, result.refreshToken(), profile);
 
-    cookieService.setAccessTokenCookie(response, accessToken, profile);
-    cookieService.setRefreshTokenCookie(response, refreshToken, profile);
-
-    VigilTokenClaims accessClaims =
-        new VigilTokenClaims(tokenService.validateAndGetClaims(accessToken));
-    VigilTokenClaims refreshClaims =
-        new VigilTokenClaims(tokenService.validateAndGetClaims(refreshToken));
-
-    return new AuthResult(
-        accessToken,
-        refreshToken,
-        accessClaims.getExpiration(),
-        refreshClaims.getExpiration(),
-        accessClaims);
+    return result;
   }
 
   /**
@@ -142,6 +160,34 @@ public class VigilAuthService {
    */
   public AuthResult login(HttpServletResponse response, String subject) {
     return login(response, subject, "default", Map.of());
+  }
+
+  // ==========================================================================
+  // Token-based login (native apps & APIs - RFC 6749)
+  // ==========================================================================
+
+  /**
+   * Creates a new authenticated session without cookies.
+   *
+   * <p>For native apps (iOS, Android) and APIs that manage tokens themselves. Per RFC 6749, tokens
+   * are returned in the response body and the client stores them securely (Keychain/Keystore).
+   *
+   * @param subject the token subject (typically user ID or email)
+   * @param claims additional claims to include in the tokens
+   * @return the tokens and their expiration times
+   */
+  public AuthResult login(String subject, Map<String, Object> claims) {
+    return loginInternal(subject, claims);
+  }
+
+  /**
+   * Creates a new authenticated session without cookies and no custom claims.
+   *
+   * @param subject the token subject (typically user ID or email)
+   * @return the tokens and their expiration times
+   */
+  public AuthResult login(String subject) {
+    return login(subject, Map.of());
   }
 
   /**
@@ -199,7 +245,6 @@ public class VigilAuthService {
       String profile,
       @Nullable Map<String, Object> updatedClaims) {
 
-    // Extract refresh token
     String refreshToken =
         cookieService
             .getRefreshToken(request, profile)
@@ -208,36 +253,49 @@ public class VigilAuthService {
                     new VigilAuthException(
                         AuthErrorCode.TOKEN_NOT_FOUND, "Refresh token not found"));
 
-    // Check blacklist
-    if (blacklistService.isBlacklisted(refreshToken)) {
-      throw new VigilAuthException(AuthErrorCode.TOKEN_BLACKLISTED, "Token has been invalidated");
-    }
+    AuthResult result = refreshInternal(refreshToken, updatedClaims);
 
-    // Refresh tokens (validates JWT and rotates)
-    TokenRefreshResult result;
-    try {
-      result = tokenService.refreshTokens(refreshToken, updatedClaims);
-    } catch (ExpiredJwtException e) {
-      throw new VigilAuthException(AuthErrorCode.TOKEN_EXPIRED, "Refresh token has expired", e);
-    } catch (JwtException e) {
-      throw new VigilAuthException(AuthErrorCode.TOKEN_INVALID, "Invalid refresh token", e);
-    }
-
-    // Set new cookies
     cookieService.setAccessTokenCookie(response, result.accessToken(), profile);
     cookieService.setRefreshTokenCookie(response, result.refreshToken(), profile);
 
-    // Parse claims for response
-    VigilTokenClaims claims =
-        new VigilTokenClaims(tokenService.validateAndGetClaims(result.accessToken()));
-
-    return new AuthResult(
-        result.accessToken(),
-        result.refreshToken(),
-        result.accessExpiresAt(),
-        result.refreshExpiresAt(),
-        claims);
+    return result;
   }
+
+  // ==========================================================================
+  // Token-based refresh (native apps & APIs - RFC 6749)
+  // ==========================================================================
+
+  /**
+   * Refreshes tokens using a raw refresh token.
+   *
+   * <p>For native apps (iOS, Android) and APIs. Per RFC 6749 Section 6, the refresh token is sent
+   * in the request body. No cookies are set; the client stores tokens securely.
+   *
+   * @param refreshToken the refresh token from the client
+   * @return the new tokens and expiration times
+   * @throws VigilAuthException if refresh fails
+   */
+  public AuthResult refresh(String refreshToken) {
+    return refreshInternal(refreshToken, null);
+  }
+
+  /**
+   * Refreshes tokens with updated claims using a raw refresh token.
+   *
+   * <p>Use this when user data has changed and tokens need new claims.
+   *
+   * @param refreshToken the refresh token from the client
+   * @param updatedClaims claims to add/update in new tokens (nullable)
+   * @return the new tokens and expiration times
+   * @throws VigilAuthException if refresh fails
+   */
+  public AuthResult refresh(String refreshToken, @Nullable Map<String, Object> updatedClaims) {
+    return refreshInternal(refreshToken, updatedClaims);
+  }
+
+  // ==========================================================================
+  // Cookie-based logout (web clients)
+  // ==========================================================================
 
   /**
    * Logs out by blacklisting tokens and clearing cookies using the default profile.
@@ -265,14 +323,31 @@ public class VigilAuthService {
    * @param profile the cookie profile
    */
   public void logout(HttpServletRequest request, HttpServletResponse response, String profile) {
-    // Blacklist access token if present
     cookieService.getAccessToken(request, profile).ifPresent(blacklistService::blacklist);
-
-    // Blacklist refresh token if present
     cookieService.getRefreshToken(request, profile).ifPresent(blacklistService::blacklist);
-
-    // Clear cookies
     cookieService.clearCookies(response, profile);
+  }
+
+  // ==========================================================================
+  // Token-based logout (native apps & APIs - RFC 6749)
+  // ==========================================================================
+
+  /**
+   * Logs out by blacklisting tokens directly.
+   *
+   * <p>For native apps (iOS, Android) and APIs. The client sends tokens in the request body and
+   * then discards them from local storage.
+   *
+   * @param accessToken the access token to blacklist (nullable)
+   * @param refreshToken the refresh token to blacklist (nullable)
+   */
+  public void logout(@Nullable String accessToken, @Nullable String refreshToken) {
+    if (accessToken != null && !accessToken.isEmpty()) {
+      blacklistService.blacklist(accessToken);
+    }
+    if (refreshToken != null && !refreshToken.isEmpty()) {
+      blacklistService.blacklist(refreshToken);
+    }
   }
 
   /**
@@ -350,5 +425,65 @@ public class VigilAuthService {
         .map(a -> a.getAuthority())
         .map(r -> r.startsWith("ROLE_") ? r.substring(5) : r)
         .toList();
+  }
+
+  /**
+   * Core login logic shared by cookie-based and token-based login methods.
+   *
+   * @param subject the token subject
+   * @param claims additional claims to include
+   * @return the tokens and their expiration times
+   */
+  private AuthResult loginInternal(String subject, Map<String, Object> claims) {
+    TokenRequest request = TokenRequest.builder().subject(subject).claims(claims).build();
+
+    String accessToken = tokenService.generateAccessToken(request);
+    String refreshToken = tokenService.generateRefreshToken(request);
+
+    VigilTokenClaims accessClaims =
+        new VigilTokenClaims(tokenService.validateAndGetClaims(accessToken));
+    VigilTokenClaims refreshClaims =
+        new VigilTokenClaims(tokenService.validateAndGetClaims(refreshToken));
+
+    return new AuthResult(
+        accessToken,
+        refreshToken,
+        accessClaims.getExpiration(),
+        refreshClaims.getExpiration(),
+        accessClaims);
+  }
+
+  /**
+   * Core refresh logic shared by cookie-based and token-based refresh methods.
+   *
+   * @param refreshToken the refresh token
+   * @param updatedClaims claims to add/update (nullable)
+   * @return the new tokens and expiration times
+   * @throws VigilAuthException if refresh fails
+   */
+  private AuthResult refreshInternal(
+      String refreshToken, @Nullable Map<String, Object> updatedClaims) {
+    if (blacklistService.isBlacklisted(refreshToken)) {
+      throw new VigilAuthException(AuthErrorCode.TOKEN_BLACKLISTED, "Token has been invalidated");
+    }
+
+    TokenRefreshResult result;
+    try {
+      result = tokenService.refreshTokens(refreshToken, updatedClaims);
+    } catch (ExpiredJwtException e) {
+      throw new VigilAuthException(AuthErrorCode.TOKEN_EXPIRED, "Refresh token has expired", e);
+    } catch (JwtException e) {
+      throw new VigilAuthException(AuthErrorCode.TOKEN_INVALID, "Invalid refresh token", e);
+    }
+
+    VigilTokenClaims claims =
+        new VigilTokenClaims(tokenService.validateAndGetClaims(result.accessToken()));
+
+    return new AuthResult(
+        result.accessToken(),
+        result.refreshToken(),
+        result.accessExpiresAt(),
+        result.refreshExpiresAt(),
+        claims);
   }
 }

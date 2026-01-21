@@ -256,4 +256,168 @@ class VigilAuthServiceTest {
     assertThat(blacklistService.isBlacklisted(accessToken)).isTrue();
     assertThat(blacklistService.isBlacklisted(refreshToken)).isTrue();
   }
+
+  // ==========================================================================
+  // Token-based methods (native apps & APIs - RFC 6749)
+  // ==========================================================================
+
+  @Test
+  @DisplayName("Token login generates tokens without cookies")
+  void tokenLoginGeneratesTokens() {
+    AuthResult result = authService.login("test-user", Map.of("role", "ADMIN"));
+
+    assertThat(result.accessToken()).isNotNull();
+    assertThat(result.refreshToken()).isNotNull();
+    assertThat(result.accessExpiresAt()).isNotNull();
+    assertThat(result.refreshExpiresAt()).isNotNull();
+    assertThat(result.claims().getSubject()).isEqualTo("test-user");
+    assertThat(result.claims().getString("role")).contains("ADMIN");
+  }
+
+  @Test
+  @DisplayName("Token login with subject only")
+  void tokenLoginWithSubjectOnly() {
+    AuthResult result = authService.login("test-user");
+
+    assertThat(result.accessToken()).isNotNull();
+    assertThat(result.refreshToken()).isNotNull();
+    assertThat(result.claims().getSubject()).isEqualTo("test-user");
+  }
+
+  @Test
+  @DisplayName("Token login produces valid tokens")
+  void tokenLoginProducesValidTokens() {
+    AuthResult result = authService.login("test-user", Map.of("userId", "456"));
+
+    assertThat(tokenService.isTokenExpired(result.accessToken())).isFalse();
+    assertThat(tokenService.isTokenExpired(result.refreshToken())).isFalse();
+
+    var claims = tokenService.validateAndGetClaims(result.accessToken());
+    assertThat(claims.getSubject()).isEqualTo("test-user");
+    assertThat(claims.get("userId")).isEqualTo("456");
+  }
+
+  @Test
+  @DisplayName("Token refresh succeeds with valid refresh token")
+  void tokenRefreshSucceeds() {
+    String refreshToken =
+        tokenService.generateRefreshToken(
+            TokenRequest.builder().subject("mobile-user").claim("device", "android").build());
+
+    AuthResult result = authService.refresh(refreshToken);
+
+    assertThat(result.accessToken()).isNotNull();
+    assertThat(result.refreshToken()).isNotNull();
+    assertThat(result.claims().getSubject()).isEqualTo("mobile-user");
+    assertThat(result.claims().getString("device")).contains("android");
+  }
+
+  @Test
+  @DisplayName("Token refresh with updated claims")
+  void tokenRefreshWithUpdatedClaims() {
+    String refreshToken =
+        tokenService.generateRefreshToken(
+            TokenRequest.builder().subject("mobile-user").claim("version", "1").build());
+
+    AuthResult result = authService.refresh(refreshToken, Map.of("version", "2"));
+
+    assertThat(result.claims().getSubject()).isEqualTo("mobile-user");
+    assertThat(result.claims().getString("version")).contains("2");
+  }
+
+  @Test
+  @DisplayName("Token refresh throws when token is blacklisted")
+  void tokenRefreshThrowsWhenBlacklisted() {
+    String refreshToken =
+        tokenService.generateRefreshToken(TokenRequest.builder().subject("test-user").build());
+    blacklistService.blacklist(refreshToken);
+
+    assertThatThrownBy(() -> authService.refresh(refreshToken))
+        .isInstanceOf(VigilAuthException.class)
+        .hasFieldOrPropertyWithValue("code", VigilAuthException.AuthErrorCode.TOKEN_BLACKLISTED);
+  }
+
+  @Test
+  @DisplayName("Token refresh rotates refresh token")
+  void tokenRefreshRotatesToken() {
+    String originalRefresh =
+        tokenService.generateRefreshToken(TokenRequest.builder().subject("test-user").build());
+
+    AuthResult result = authService.refresh(originalRefresh);
+
+    // Original token should be blacklisted after rotation
+    assertThat(blacklistService.isBlacklisted(originalRefresh)).isTrue();
+    // New token should be different
+    assertThat(result.refreshToken()).isNotEqualTo(originalRefresh);
+  }
+
+  @Test
+  @DisplayName("Token logout blacklists both tokens")
+  void tokenLogoutBlacklistsBothTokens() {
+    String accessToken =
+        tokenService.generateAccessToken(TokenRequest.builder().subject("test-user").build());
+    String refreshToken =
+        tokenService.generateRefreshToken(TokenRequest.builder().subject("test-user").build());
+
+    authService.logout(accessToken, refreshToken);
+
+    assertThat(blacklistService.isBlacklisted(accessToken)).isTrue();
+    assertThat(blacklistService.isBlacklisted(refreshToken)).isTrue();
+  }
+
+  @Test
+  @DisplayName("Token logout handles null access token")
+  void tokenLogoutHandlesNullAccessToken() {
+    String refreshToken =
+        tokenService.generateRefreshToken(TokenRequest.builder().subject("test-user").build());
+
+    authService.logout(null, refreshToken);
+
+    assertThat(blacklistService.isBlacklisted(refreshToken)).isTrue();
+  }
+
+  @Test
+  @DisplayName("Token logout handles null refresh token")
+  void tokenLogoutHandlesNullRefreshToken() {
+    String accessToken =
+        tokenService.generateAccessToken(TokenRequest.builder().subject("test-user").build());
+
+    authService.logout(accessToken, null);
+
+    assertThat(blacklistService.isBlacklisted(accessToken)).isTrue();
+  }
+
+  @Test
+  @DisplayName("Token logout handles empty strings")
+  void tokenLogoutHandlesEmptyStrings() {
+    // Should not throw, just ignore empty values
+    authService.logout("", "");
+    // Cast to resolve ambiguity between (HttpServletRequest, HttpServletResponse) and (String,
+    // String)
+    authService.logout((String) null, (String) null);
+  }
+
+  @Test
+  @DisplayName("Full token-based auth flow works end-to-end")
+  void fullTokenBasedAuthFlow() {
+    // 1. Login (native app)
+    AuthResult loginResult = authService.login("mobile-user", Map.of("platform", "ios"));
+    assertThat(loginResult.claims().getSubject()).isEqualTo("mobile-user");
+
+    // 2. Use access token (simulated - just verify it's valid)
+    assertThat(tokenService.isTokenExpired(loginResult.accessToken())).isFalse();
+
+    // 3. Refresh when access token expires
+    AuthResult refreshResult = authService.refresh(loginResult.refreshToken());
+    assertThat(refreshResult.claims().getSubject()).isEqualTo("mobile-user");
+    assertThat(refreshResult.claims().getString("platform")).contains("ios");
+
+    // 4. Old refresh token should be rotated (blacklisted)
+    assertThat(blacklistService.isBlacklisted(loginResult.refreshToken())).isTrue();
+
+    // 5. Logout
+    authService.logout(refreshResult.accessToken(), refreshResult.refreshToken());
+    assertThat(blacklistService.isBlacklisted(refreshResult.accessToken())).isTrue();
+    assertThat(blacklistService.isBlacklisted(refreshResult.refreshToken())).isTrue();
+  }
 }

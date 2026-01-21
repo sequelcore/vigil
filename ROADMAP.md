@@ -14,10 +14,12 @@ Vigil handles **token lifecycle**, not **user lifecycle**.
 
 | Standard | Description | Target |
 |----------|-------------|--------|
-| RFC 7519 | JWT Specification | v1.0.0 ✅ |
+| RFC 7519 | JWT Specification | v1.0.0 |
+| RFC 6749 | OAuth 2.0 Token Refresh | v3.1.0 |
 | RFC 6750 | Bearer Token Usage | v2.7.0 |
+| RFC 8252 | OAuth 2.0 for Native Apps | v3.1.0 |
 | RFC 8725bis | JWT Best Current Practices (2025) | v3.0.0 |
-| RFC 9700 | OAuth 2.0 Security BCP (2025) | v2.0.0 ✅ |
+| RFC 9700 | OAuth 2.0 Security BCP (2025) | v2.0.0 |
 
 ---
 
@@ -52,7 +54,7 @@ Vigil handles **token lifecycle**, not **user lifecycle**.
 
 ### v2.4.0 - Profile Paths
 - Path-based cookie profile resolution via `profile-paths`
-- `ProfilePathMatcher` for request path → cookie profile mapping
+- `ProfilePathMatcher` for request path -> cookie profile mapping
 
 ### v2.4.1 - Cookie Hardening
 - Spring `ResponseCookie` builder for RFC-compliant cookies
@@ -63,7 +65,7 @@ Vigil handles **token lifecycle**, not **user lifecycle**.
 
 ### v2.6.0 - Login Orchestration
 - `VigilAuthService.login()` - Generate tokens + set cookies in one call
-- Completes the auth lifecycle: login → refresh → logout
+- Completes the auth lifecycle: login -> refresh -> logout
 
 ### v2.6.1 - Public Path Tenant Context
 - Tenant context populated for public paths when `tenant.enabled=true`
@@ -73,14 +75,14 @@ Vigil handles **token lifecycle**, not **user lifecycle**.
 ### v2.7.0 - RFC 6750 Compliance
 - `VigilAuthenticationEntryPoint` with `WWW-Authenticate` header
 - Error codes per RFC 6750 Section 3:
-  - No token → `Bearer realm="app"` (no error code)
-  - Expired → `error="invalid_token", error_description="The access token has expired"`
-  - Invalid → `error="invalid_token", error_description="..."`
-  - Revoked → `error="invalid_token", error_description="Token has been revoked"`
+  - No token: `Bearer realm="app"` (no error code)
+  - Expired: `error="invalid_token", error_description="The access token has expired"`
+  - Invalid: `error="invalid_token", error_description="..."`
+  - Revoked: `error="invalid_token", error_description="Token has been revoked"`
 - Configurable realm via `vigil.auth.realm`
 - Filter hooks propagate error info to entry point
 
-### v3.0.0 - RFC 8725bis Compliance (Current)
+### v3.0.0 - RFC 8725bis Compliance
 - **Secret key validation** - Minimum 32 characters (256 bits) enforced at startup
 - **Claims validation** - `iss` and `aud` validated when configured
 - **Algorithm security** - HMAC-SHA256 enforced by jjwt (no `alg:none`)
@@ -90,9 +92,16 @@ Breaking changes:
 - Apps with secrets < 32 chars will fail at startup
 - Tokens from other issuers/audiences rejected when `iss`/`aud` configured
 
----
+### v3.1.0 - Native App & API Support (Current)
+- **Bearer token login** - `VigilAuthService.login(subject, claims)` returns tokens without cookies
+- **Bearer token refresh** - `VigilAuthService.refresh(refreshToken)` for native apps and APIs
+- **Bearer token logout** - `VigilAuthService.logout(accessToken, refreshToken)` for stateless clients
+- **Transport-agnostic design** - Token operations work regardless of transport (cookie, header, body)
+- **Unified API** - Same `AuthResult` response for all client types
+- **DRY refactor** - Shared `loginInternal()` and `refreshInternal()` methods
 
-## Planned
+Per RFC 6749 Section 6, refresh tokens are transmitted in the request body, not cookies.
+Native apps (iOS, Android) and APIs use Authorization headers per RFC 8252.
 
 ---
 
