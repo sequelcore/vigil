@@ -10,10 +10,22 @@ import org.junit.jupiter.api.Test;
 class FilterConfigTest {
 
   @Test
-  @DisplayName("Default constructor sets empty profilePaths")
-  void defaultConstructorSetsEmptyProfilePaths() {
+  @DisplayName(
+      "Convenience constructor with only publicPaths sets empty ignoredPaths and profilePaths")
+  void convenienceConstructorSetsEmptyIgnoredAndProfilePaths() {
     FilterConfig config = new FilterConfig(List.of("/public/**"));
 
+    assertThat(config.ignoredPaths()).isEmpty();
+    assertThat(config.publicPaths()).containsExactly("/public/**");
+    assertThat(config.profilePaths()).isEmpty();
+  }
+
+  @Test
+  @DisplayName("Two-argument constructor sets empty profilePaths")
+  void twoArgumentConstructorSetsEmptyProfilePaths() {
+    FilterConfig config = new FilterConfig(List.of("/actuator/**"), List.of("/public/**"));
+
+    assertThat(config.ignoredPaths()).containsExactly("/actuator/**");
     assertThat(config.publicPaths()).containsExactly("/public/**");
     assertThat(config.profilePaths()).isEmpty();
   }
@@ -26,9 +38,11 @@ class FilterConfigTest {
             "staff", List.of("/api/console/**"),
             "customer", List.of("/api/box/**"));
 
-    FilterConfig config = new FilterConfig(List.of("/api/**", "/health"), profilePaths);
+    FilterConfig config =
+        new FilterConfig(List.of("/actuator/**", "/health"), List.of("/api/**"), profilePaths);
 
-    assertThat(config.publicPaths()).containsExactly("/api/**", "/health");
+    assertThat(config.ignoredPaths()).containsExactly("/actuator/**", "/health");
+    assertThat(config.publicPaths()).containsExactly("/api/**");
     assertThat(config.profilePaths()).containsKeys("staff", "customer");
   }
 }

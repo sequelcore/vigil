@@ -50,7 +50,8 @@ class VigilIntegrationTest {
     assertThat(protectionService).isNotNull();
     assertThat(properties.tenant().enabled()).isTrue();
     assertThat(properties.protection().maxAttempts()).isEqualTo(3);
-    assertThat(properties.filter().publicPaths()).contains("/public/**", "/health");
+    assertThat(properties.filter().ignoredPaths()).contains("/actuator/**", "/health");
+    assertThat(properties.filter().publicPaths()).contains("/public/**");
   }
 
   @Test

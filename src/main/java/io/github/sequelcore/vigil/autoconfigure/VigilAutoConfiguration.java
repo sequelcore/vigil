@@ -206,7 +206,10 @@ public class VigilAutoConfiguration {
       @Nullable VigilSessionProvider<?> sessionProvider,
       List<VigilContextPopulator> contextPopulators) {
     FilterConfig filterConfig =
-        new FilterConfig(properties.filter().publicPaths(), properties.filter().profilePaths());
+        new FilterConfig(
+            properties.filter().ignoredPaths(),
+            properties.filter().publicPaths(),
+            properties.filter().profilePaths());
     return new VigilAuthenticationFilter(
         tokenService,
         cookieService,

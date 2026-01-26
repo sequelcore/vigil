@@ -8,7 +8,7 @@
 |-------|-------|
 | Group ID | io.github.sequelcore |
 | Artifact ID | vigil-spring-boot-starter |
-| Version | 3.1.0 |
+| Version | 4.0.0 |
 | Java | 21 |
 | Spring Boot | 3.5.x |
 
@@ -149,7 +149,10 @@ vigil:
         refresh-token-name: staff_refresh_token
 
   filter:
-    public-paths:
+    ignored-paths:           # Skip ALL processing (no tenant, no auth, no populators)
+      - /actuator/**
+      - /health
+    public-paths:            # Permit anonymous, but authenticate if credentials present
       - /api/auth/login
       - /api/auth/register
     profile-paths:

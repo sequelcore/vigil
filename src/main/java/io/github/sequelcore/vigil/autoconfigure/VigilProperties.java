@@ -70,7 +70,7 @@ public record VigilProperties(
       protection = new Protection(5, Duration.ofMinutes(15), 10000);
     }
     if (filter == null) {
-      filter = new Filter(Collections.emptyList(), Collections.emptyMap());
+      filter = new Filter(Collections.emptyList(), Collections.emptyList(), Collections.emptyMap());
     }
     if (session == null) {
       session = new Session(false, "session_token", Duration.ofMinutes(30));
@@ -301,12 +301,17 @@ public record VigilProperties(
   /**
    * Authentication filter configuration.
    *
-   * @param publicPaths list of paths that bypass authentication
+   * @param ignoredPaths paths that bypass ALL processing (no tenant, no auth, no populators)
+   * @param publicPaths paths that permit anonymous but authenticate if credentials present
    * @param profilePaths mapping of profile name to path patterns for cookie resolution
    */
-  public record Filter(List<String> publicPaths, Map<String, List<String>> profilePaths) {
+  public record Filter(
+      List<String> ignoredPaths, List<String> publicPaths, Map<String, List<String>> profilePaths) {
     /** Applies defaults. */
     public Filter {
+      if (ignoredPaths == null) {
+        ignoredPaths = Collections.emptyList();
+      }
       if (publicPaths == null) {
         publicPaths = Collections.emptyList();
       }

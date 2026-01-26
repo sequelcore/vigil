@@ -20,7 +20,7 @@ Same pattern as Auth0/Okta starters.
 ## Install
 
 ```kotlin
-implementation("io.github.sequelcore:vigil-spring-boot-starter:3.1.0")
+implementation("io.github.sequelcore:vigil-spring-boot-starter:4.0.0")
 ```
 
 ## Configure
@@ -37,7 +37,10 @@ vigil:
         access-token-name: access_token
         refresh-token-name: refresh_token
   filter:
-    public-paths:
+    ignored-paths:       # Skip ALL processing (no tenant, no auth, no populators)
+      - /actuator/**
+      - /health
+    public-paths:        # Permit anonymous, authenticate if credentials present
       - /auth/**
       - /public/**
 ```
@@ -113,6 +116,22 @@ public class MobileAuthController {
     }
 }
 ```
+
+## Filter Behavior
+
+The authentication filter separates **authentication** (who are you?) from **authorization** (can you access this?).
+
+| Path Type | Credentials | Behavior |
+|-----------|-------------|----------|
+| Ignored | Any | Skip all processing, proceed |
+| Public | None | Permit anonymous |
+| Public | Valid | Authenticate user |
+| Public | Invalid | Permit anonymous (hook called) |
+| Protected | None | 401 Unauthorized |
+| Protected | Valid | Authenticate user |
+| Protected | Invalid | 401 Unauthorized |
+
+This allows public pages to optionally show user info when logged in (e.g., "Welcome, Alice").
 
 ## Services
 
@@ -297,7 +316,8 @@ vigil:
     header-name: X-Tenant-ID
 
   filter:
-    public-paths: []
+    ignored-paths: []           # Skip ALL processing
+    public-paths: []            # Permit anonymous, authenticate if present
     profile-paths:
       staff:
         - /api/console/**

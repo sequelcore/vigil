@@ -28,7 +28,28 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-/** JWT and session authentication filter. */
+/**
+ * JWT and session authentication filter.
+ *
+ * <p>This filter separates authentication from authorization:
+ *
+ * <ul>
+ *   <li><b>Ignored paths:</b> Skip all processing (no tenant, no auth, no populators)
+ *   <li><b>Public paths:</b> Permit anonymous, but authenticate if credentials present
+ *   <li><b>Protected paths:</b> Require authentication (Spring Security handles 401)
+ * </ul>
+ *
+ * <p>Flow:
+ *
+ * <ol>
+ *   <li>Check ignored paths - skip entirely if matched
+ *   <li>Extract tenant context from header (if enabled)
+ *   <li>Attempt JWT authentication (if credentials present)
+ *   <li>Attempt session authentication (if JWT absent/failed and session enabled)
+ *   <li>Authorization decision: proceed based on path type and auth status
+ *   <li>Populate custom contexts via {@link VigilContextPopulator}
+ * </ol>
+ */
 public class VigilAuthenticationFilter extends OncePerRequestFilter {
 
   private static final String BEARER_PREFIX = "Bearer ";
@@ -41,6 +62,7 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
   @Nullable private final VigilSessionService sessionService;
   @Nullable private final VigilSessionProvider<?> sessionProvider;
   private final List<VigilContextPopulator> contextPopulators;
+  private final PathMatcher ignoredPathMatcher;
   private final PathMatcher publicPathMatcher;
   private final ProfilePathMatcher profilePathMatcher;
 
@@ -64,6 +86,7 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
         contextPopulators.stream()
             .sorted(Comparator.comparingInt(VigilContextPopulator::getOrder))
             .toList();
+    this.ignoredPathMatcher = new PathMatcher(filterConfig.ignoredPaths());
     this.publicPathMatcher = new PathMatcher(filterConfig.publicPaths());
     this.profilePathMatcher = new ProfilePathMatcher(filterConfig.profilePaths());
   }
@@ -73,49 +96,51 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
       HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
       throws ServletException, IOException {
 
+    String path = request.getRequestURI();
+
+    // Step 1: Ignored paths - skip ALL processing (no tenant, no auth, no populators)
+    if (isIgnoredPath(path)) {
+      filterChain.doFilter(request, response);
+      return;
+    }
+
     VigilTokenClaims authenticatedClaims = null;
+    boolean authenticated = false;
 
     try {
-      String path = request.getRequestURI();
-
-      // Extract tenant context from header when enabled (before public path check)
+      // Step 2: Extract tenant context (always for non-ignored paths)
       if (tenantService != null) {
         tenantService.extractTenantId(request).ifPresent(tenantService::setCurrentTenant);
       }
 
-      // Skip authentication for public paths (but still populate contexts)
-      if (isPublicPath(path)) {
-        populateContexts(request, null);
-        filterChain.doFilter(request, response);
-        return;
-      }
-
-      // Try JWT authentication first
+      // Step 3: Try JWT authentication (if credentials present)
       Optional<String> tokenOpt = extractToken(request, path);
-
       if (tokenOpt.isPresent()) {
         authenticatedClaims = authenticateJwt(request, response, tokenOpt.get());
-        if (authenticatedClaims != null) {
-          populateContexts(request, authenticatedClaims);
-          filterChain.doFilter(request, response);
-          return;
-        }
+        authenticated = (authenticatedClaims != null);
       }
 
-      // Try session authentication if available
-      if (sessionService != null && sessionProvider != null) {
+      // Step 4: Try session authentication if JWT failed/absent
+      if (!authenticated && sessionService != null && sessionProvider != null) {
         Optional<String> sessionTokenOpt = sessionService.extractToken(request);
         if (sessionTokenOpt.isPresent()) {
-          if (authenticateSession(request, response, sessionTokenOpt.get())) {
-            populateContexts(request, null);
-            filterChain.doFilter(request, response);
-            return;
-          }
+          authenticated = authenticateSession(request, response, sessionTokenOpt.get());
         }
       }
 
-      // No authentication found
-      onMissingToken(request, response);
+      // Step 5: Authorization decision + context population
+      if (authenticated) {
+        // Authenticated - SecurityContext already set by authenticateJwt/authenticateSession
+        populateContexts(request, authenticatedClaims);
+      } else if (isPublicPath(path)) {
+        // Public path - permit anonymous access
+        populateContexts(request, null);
+      } else {
+        // Protected path without authentication
+        onMissingToken(request, response);
+        populateContexts(request, null);
+      }
+
       filterChain.doFilter(request, response);
 
     } finally {
@@ -300,7 +325,14 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
         .toList();
   }
 
-  /** Checks if the given path should skip authentication. */
+  /** Checks if the given path should skip ALL processing (no tenant, no auth, no populators). */
+  protected boolean isIgnoredPath(String path) {
+    return ignoredPathMatcher.matches(path);
+  }
+
+  /**
+   * Checks if the given path permits anonymous access (but authenticates if credentials present).
+   */
   protected boolean isPublicPath(String path) {
     return publicPathMatcher.matches(path);
   }

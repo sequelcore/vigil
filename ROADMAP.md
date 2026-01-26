@@ -92,7 +92,7 @@ Breaking changes:
 - Apps with secrets < 32 chars will fail at startup
 - Tokens from other issuers/audiences rejected when `iss`/`aud` configured
 
-### v3.1.0 - Native App & API Support (Current)
+### v3.1.0 - Native App & API Support
 - **Bearer token login** - `VigilAuthService.login(subject, claims)` returns tokens without cookies
 - **Bearer token refresh** - `VigilAuthService.refresh(refreshToken)` for native apps and APIs
 - **Bearer token logout** - `VigilAuthService.logout(accessToken, refreshToken)` for stateless clients
@@ -102,6 +102,42 @@ Breaking changes:
 
 Per RFC 6749 Section 6, refresh tokens are transmitted in the request body, not cookies.
 Native apps (iOS, Android) and APIs use Authorization headers per RFC 8252.
+
+### v4.0.0 - Authentication/Authorization Separation (Current)
+- **`ignored-paths`** - New config for paths that skip ALL processing (no tenant, no auth, no populators)
+- **`public-paths` semantics change** - Now permits anonymous but authenticates if credentials present
+- **Filter flow redesign** - Separates authentication (who?) from authorization (can access?)
+- **Optional session enrichment** - Public paths can now show user info when logged in
+
+Breaking changes:
+- `public-paths` behavior changed - previously skipped all auth, now attempts auth if credentials present
+- Apps relying on old `public-paths` behavior should move those paths to `ignored-paths`
+
+| Path Type | Credentials | v3.x Behavior | v4.0 Behavior |
+|-----------|-------------|---------------|---------------|
+| public-paths | Valid token | Ignored | Authenticated |
+| public-paths | Invalid token | Ignored | Permit anonymous |
+| ignored-paths | Any | N/A | Skip all processing |
+
+Migration:
+```yaml
+# v3.x
+vigil:
+  filter:
+    public-paths:
+      - /actuator/**
+      - /health
+      - /api/public/**
+
+# v4.0
+vigil:
+  filter:
+    ignored-paths:
+      - /actuator/**
+      - /health
+    public-paths:
+      - /api/public/**
+```
 
 ---
 
