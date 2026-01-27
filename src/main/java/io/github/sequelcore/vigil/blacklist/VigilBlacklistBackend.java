@@ -1,5 +1,6 @@
 package io.github.sequelcore.vigil.blacklist;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 
@@ -25,6 +26,26 @@ public interface VigilBlacklistBackend {
    * @return true if blacklisted
    */
   boolean isBlacklisted(String token);
+
+  /**
+   * Rotates a refresh token with grace period support.
+   *
+   * <p>The old token enters a grace period where it can still be reused (returns cached new
+   * tokens). After grace period expires, reuse is rejected.
+   *
+   * @param oldToken the rotated refresh token
+   * @param rotatedToken the rotation data with new tokens
+   * @param gracePeriod how long the old token remains reusable
+   */
+  void rotate(String oldToken, RotatedToken rotatedToken, Duration gracePeriod);
+
+  /**
+   * Gets rotation data if the token was rotated and is within grace period.
+   *
+   * @param token the token to check
+   * @return rotation data if in grace period, empty if not rotated or grace expired
+   */
+  Optional<RotatedToken> getRotation(String token);
 
   /**
    * Blacklists all tokens for a subject issued before the given timestamp.

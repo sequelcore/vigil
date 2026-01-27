@@ -61,7 +61,7 @@ public record VigilProperties(
       password = new Password(12);
     }
     if (blacklist == null) {
-      blacklist = new Blacklist(10000, Duration.ofHours(24));
+      blacklist = new Blacklist(10000, Duration.ofHours(24), Duration.ofSeconds(30));
     }
     if (tenant == null) {
       tenant = new Tenant(false, "X-Tenant-ID");
@@ -232,13 +232,15 @@ public record VigilProperties(
    *
    * @param maxSize maximum number of tokens to keep
    * @param ttl time-to-live for blacklisted tokens
+   * @param gracePeriod grace period for rotated refresh tokens (allows reuse during network issues)
    */
-  public record Blacklist(int maxSize, Duration ttl) {
+  public record Blacklist(int maxSize, Duration ttl, Duration gracePeriod) {
     /**
      * Validates and normalizes blacklist settings.
      *
      * @param maxSize maximum number of tokens to keep
      * @param ttl time-to-live for blacklisted tokens
+     * @param gracePeriod grace period for rotated tokens (default 30s, max 60s)
      */
     public Blacklist {
       if (maxSize <= 0) {
@@ -246,6 +248,11 @@ public record VigilProperties(
       }
       if (ttl == null) {
         ttl = Duration.ofHours(24);
+      }
+      if (gracePeriod == null) {
+        gracePeriod = Duration.ofSeconds(30);
+      } else if (gracePeriod.toSeconds() > 60) {
+        gracePeriod = Duration.ofSeconds(60);
       }
     }
   }

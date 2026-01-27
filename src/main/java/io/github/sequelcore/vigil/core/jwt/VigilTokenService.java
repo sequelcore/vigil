@@ -99,6 +99,9 @@ public class VigilTokenService {
   /**
    * Refreshes tokens with rotation and updated claims.
    *
+   * <p>Note: This method only generates new tokens. Token rotation (blacklisting the old token) is
+   * handled by {@link io.github.sequelcore.vigil.auth.VigilAuthService} with grace period support.
+   *
    * @param refreshToken the current refresh token
    * @param updatedClaims claims to update (merged with existing)
    * @return new token pair with expiration times
@@ -112,11 +115,6 @@ public class VigilTokenService {
     String type = claims.get("type", String.class);
     if (!"refresh".equals(type)) {
       throw new JwtException("Token is not a refresh token");
-    }
-
-    // Blacklist old refresh token (rotation)
-    if (blacklistService != null) {
-      blacklistService.blacklist(refreshToken);
     }
 
     // Build new claims

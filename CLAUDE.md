@@ -8,7 +8,7 @@
 |-------|-------|
 | Group ID | io.github.sequelcore |
 | Artifact ID | vigil-spring-boot-starter |
-| Version | 4.0.0 |
+| Version | 4.1.0 |
 | Java | 21 |
 | Spring Boot | 3.5.x |
 
@@ -159,6 +159,11 @@ vigil:
       staff: ["/api/admin/**", "/api/staff/**"]
       customer: ["/api/customer/**"]
 
+  blacklist:
+    max-size: 10000          # Maximum cached entries
+    ttl: 24h                 # Time-to-live for blacklisted tokens
+    grace-period: 30s        # Grace period for token rotation (0-60s)
+
   tenant:
     enabled: false
     header-name: X-Tenant-ID
@@ -166,6 +171,15 @@ vigil:
   session:
     enabled: false
 ```
+
+### Grace Period for Token Rotation
+
+When a refresh token is rotated, the old token enters a grace period where it can still be reused. This handles race conditions when:
+- Network issues prevent the client from receiving the new tokens
+- Client crashes before persisting the new tokens
+- Mobile apps lose signal mid-refresh
+
+During the grace period, reusing the old token returns the same cached new tokens. After grace period expires, the old token is rejected.
 
 ## Code Standards
 

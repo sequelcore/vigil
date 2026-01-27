@@ -20,7 +20,7 @@ Same pattern as Auth0/Okta starters.
 ## Install
 
 ```kotlin
-implementation("io.github.sequelcore:vigil-spring-boot-starter:4.0.0")
+implementation("io.github.sequelcore:vigil-spring-boot-starter:4.1.0")
 ```
 
 ## Configure
@@ -301,6 +301,7 @@ vigil:
   blacklist:
     max-size: 10000
     ttl: 24h
+    grace-period: 30s         # Reuse window for rotated tokens (0-60s)
 
   protection:
     max-attempts: 5

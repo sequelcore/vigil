@@ -51,7 +51,7 @@ class VigilAuthServiceTest {
             Map.of("default", new VigilProperties.CookieProfile("access_token", "refresh_token")));
 
     VigilProperties.Blacklist blacklistConfig =
-        new VigilProperties.Blacklist(10000, Duration.ofHours(24));
+        new VigilProperties.Blacklist(10000, Duration.ofHours(24), Duration.ofSeconds(30));
     blacklistService = new VigilBlacklistService(blacklistConfig);
     tokenService = new VigilTokenService(jwtConfig, blacklistService);
     cookieService = new VigilCookieService(cookieConfig, jwtConfig);
@@ -338,17 +338,22 @@ class VigilAuthServiceTest {
   }
 
   @Test
-  @DisplayName("Token refresh rotates refresh token")
+  @DisplayName("Token refresh rotates refresh token with grace period")
   void tokenRefreshRotatesToken() {
     String originalRefresh =
         tokenService.generateRefreshToken(TokenRequest.builder().subject("test-user").build());
 
     AuthResult result = authService.refresh(originalRefresh);
 
-    // Original token should be blacklisted after rotation
-    assertThat(blacklistService.isBlacklisted(originalRefresh)).isTrue();
-    // New token should be different
-    assertThat(result.refreshToken()).isNotEqualTo(originalRefresh);
+    // Result should contain valid tokens
+    assertThat(result.accessToken()).isNotBlank();
+    assertThat(result.refreshToken()).isNotBlank();
+    // Original token should be in rotation cache (grace period) - can be reused
+    assertThat(blacklistService.getRotation(originalRefresh)).isPresent();
+    // Using old token during grace period returns same cached tokens
+    AuthResult cachedResult = authService.refresh(originalRefresh);
+    assertThat(cachedResult.accessToken()).isEqualTo(result.accessToken());
+    assertThat(cachedResult.refreshToken()).isEqualTo(result.refreshToken());
   }
 
   @Test
@@ -412,8 +417,11 @@ class VigilAuthServiceTest {
     assertThat(refreshResult.claims().getSubject()).isEqualTo("mobile-user");
     assertThat(refreshResult.claims().getString("platform")).contains("ios");
 
-    // 4. Old refresh token should be rotated (blacklisted)
-    assertThat(blacklistService.isBlacklisted(loginResult.refreshToken())).isTrue();
+    // 4. Old refresh token should be in grace period (can be reused)
+    assertThat(blacklistService.getRotation(loginResult.refreshToken())).isPresent();
+    // Reusing old token during grace period returns same cached tokens
+    AuthResult graceResult = authService.refresh(loginResult.refreshToken());
+    assertThat(graceResult.accessToken()).isEqualTo(refreshResult.accessToken());
 
     // 5. Logout
     authService.logout(refreshResult.accessToken(), refreshResult.refreshToken());

@@ -103,7 +103,7 @@ Breaking changes:
 Per RFC 6749 Section 6, refresh tokens are transmitted in the request body, not cookies.
 Native apps (iOS, Android) and APIs use Authorization headers per RFC 8252.
 
-### v4.0.0 - Authentication/Authorization Separation (Current)
+### v4.0.0 - Authentication/Authorization Separation
 - **`ignored-paths`** - New config for paths that skip ALL processing (no tenant, no auth, no populators)
 - **`public-paths` semantics change** - Now permits anonymous but authenticates if credentials present
 - **Filter flow redesign** - Separates authentication (who?) from authorization (can access?)
@@ -137,6 +137,22 @@ vigil:
       - /health
     public-paths:
       - /api/public/**
+```
+
+### v4.1.0 - Grace Period for Token Rotation (Current)
+- **`grace-period` config** - Configurable reuse window for rotated refresh tokens (default 30s, max 60s)
+- **Race condition fix** - Handles client crashes/network issues during token refresh
+- **Industry standard** - Same pattern as Auth0/Okta refresh token rotation with reuse detection
+
+When a refresh token is rotated, the old token enters a grace period where reuse returns the cached new tokens. This prevents session loss when:
+- Network issues prevent client from receiving new tokens
+- Client crashes before persisting new tokens
+- Mobile apps lose signal mid-refresh
+
+```yaml
+vigil:
+  blacklist:
+    grace-period: 30s   # 0-60 seconds
 ```
 
 ---

@@ -1,6 +1,7 @@
 package io.github.sequelcore.vigil.auth;
 
 import io.github.sequelcore.vigil.auth.VigilAuthException.AuthErrorCode;
+import io.github.sequelcore.vigil.blacklist.RotatedToken;
 import io.github.sequelcore.vigil.blacklist.VigilBlacklistService;
 import io.github.sequelcore.vigil.core.cookie.VigilCookieService;
 import io.github.sequelcore.vigil.core.jwt.TokenRefreshResult;
@@ -22,65 +23,18 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 /**
- * High-level authentication operations.
- *
- * <p>Orchestrates token service, cookie service, and blacklist service for the complete auth
- * lifecycle: login, refresh, and logout.
+ * High-level authentication operations for login, refresh, and logout.
  *
  * <p>Supports two client types:
  *
  * <ul>
- *   <li><b>Web SPAs</b> - Use cookie-based methods with HttpServletRequest/Response
- *   <li><b>Native apps &amp; APIs</b> - Use token-based methods with raw token strings (RFC 6749)
+ *   <li><b>Web SPAs</b> - Cookie-based methods with HttpServletRequest/Response
+ *   <li><b>Native apps</b> - Token-based methods with raw strings (RFC 6749)
  * </ul>
  *
- * <p>Example usage for web clients:
+ * <p>Web client example: {@code authService.login(response, subject, "staff", claims)}
  *
- * <pre>{@code
- * @PostMapping("/auth/login")
- * public AuthResult login(@RequestBody LoginRequest req, HttpServletResponse response) {
- *     User user = userRepository.findByEmail(req.email())
- *         .filter(u -> passwordService.matches(req.password(), u.getPasswordHash()))
- *         .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
- *
- *     return authService.login(response, user.getEmail(), "staff",
- *         Map.of("userId", user.getId(), "roles", user.getRoles()));
- * }
- *
- * @PostMapping("/auth/refresh")
- * public AuthResult refresh(HttpServletRequest request, HttpServletResponse response) {
- *     return authService.refresh(request, response, "staff");
- * }
- *
- * @PostMapping("/auth/logout")
- * public void logout(HttpServletRequest request, HttpServletResponse response) {
- *     authService.logout(request, response, "staff");
- * }
- * }</pre>
- *
- * <p>Example usage for native apps (RFC 6749):
- *
- * <pre>{@code
- * @PostMapping("/auth/login")
- * public AuthResult login(@RequestBody LoginRequest req) {
- *     User user = userRepository.findByEmail(req.email())
- *         .filter(u -> passwordService.matches(req.password(), u.getPasswordHash()))
- *         .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
- *
- *     return authService.login(user.getEmail(),
- *         Map.of("userId", user.getId(), "roles", user.getRoles()));
- * }
- *
- * @PostMapping("/auth/refresh")
- * public AuthResult refresh(@RequestBody RefreshRequest req) {
- *     return authService.refresh(req.refreshToken());
- * }
- *
- * @PostMapping("/auth/logout")
- * public void logout(@RequestBody LogoutRequest req) {
- *     authService.logout(req.accessToken(), req.refreshToken());
- * }
- * }</pre>
+ * <p>Native app example: {@code authService.login(subject, claims)}
  */
 public class VigilAuthService {
 
@@ -204,17 +158,6 @@ public class VigilAuthService {
 
   /**
    * Refreshes tokens using the refresh token from cookies.
-   *
-   * <p>This method:
-   *
-   * <ol>
-   *   <li>Extracts refresh token from cookie
-   *   <li>Validates it's not blacklisted
-   *   <li>Validates the JWT signature and expiration
-   *   <li>Blacklists the old refresh token (rotation)
-   *   <li>Generates new access and refresh tokens
-   *   <li>Sets new cookies
-   * </ol>
    *
    * @param request the HTTP request
    * @param response the HTTP response
@@ -456,6 +399,10 @@ public class VigilAuthService {
   /**
    * Core refresh logic shared by cookie-based and token-based refresh methods.
    *
+   * <p>Implements grace period for token rotation: if a refresh token was recently rotated, the
+   * cached new tokens are returned. This handles race conditions when the client fails to persist
+   * new tokens due to network issues.
+   *
    * @param refreshToken the refresh token
    * @param updatedClaims claims to add/update (nullable)
    * @return the new tokens and expiration times
@@ -463,10 +410,26 @@ public class VigilAuthService {
    */
   private AuthResult refreshInternal(
       String refreshToken, @Nullable Map<String, Object> updatedClaims) {
+    // Check grace period: return cached tokens if recently rotated
+    Optional<RotatedToken> rotation = blacklistService.getRotation(refreshToken);
+    if (rotation.isPresent()) {
+      RotatedToken cached = rotation.get();
+      VigilTokenClaims claims =
+          new VigilTokenClaims(tokenService.validateAndGetClaims(cached.newAccessToken()));
+      return new AuthResult(
+          cached.newAccessToken(),
+          cached.newRefreshToken(),
+          cached.accessExpiration(),
+          cached.refreshExpiration(),
+          claims);
+    }
+
+    // Token was not recently rotated - check if permanently blacklisted
     if (blacklistService.isBlacklisted(refreshToken)) {
       throw new VigilAuthException(AuthErrorCode.TOKEN_BLACKLISTED, "Token has been invalidated");
     }
 
+    // Generate new tokens
     TokenRefreshResult result;
     try {
       result = tokenService.refreshTokens(refreshToken, updatedClaims);
@@ -475,6 +438,16 @@ public class VigilAuthService {
     } catch (JwtException e) {
       throw new VigilAuthException(AuthErrorCode.TOKEN_INVALID, "Invalid refresh token", e);
     }
+
+    // Store rotation in grace period cache
+    blacklistService.rotate(
+        refreshToken,
+        new RotatedToken(
+            Instant.now(),
+            result.accessToken(),
+            result.refreshToken(),
+            result.accessExpiresAt(),
+            result.refreshExpiresAt()));
 
     VigilTokenClaims claims =
         new VigilTokenClaims(tokenService.validateAndGetClaims(result.accessToken()));

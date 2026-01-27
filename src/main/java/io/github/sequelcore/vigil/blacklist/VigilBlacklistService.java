@@ -1,6 +1,7 @@
 package io.github.sequelcore.vigil.blacklist;
 
 import io.github.sequelcore.vigil.autoconfigure.VigilProperties;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 
@@ -20,6 +21,7 @@ import java.util.Optional;
 public class VigilBlacklistService {
 
   private final VigilBlacklistBackend backend;
+  private final Duration gracePeriod;
 
   /**
    * Creates a blacklist service with Caffeine backend (default).
@@ -28,15 +30,18 @@ public class VigilBlacklistService {
    */
   public VigilBlacklistService(VigilProperties.Blacklist config) {
     this.backend = new CaffeineBlacklistBackend(config);
+    this.gracePeriod = config.gracePeriod();
   }
 
   /**
    * Creates a blacklist service with custom backend.
    *
    * @param backend the backend implementation
+   * @param gracePeriod grace period for token rotation
    */
-  public VigilBlacklistService(VigilBlacklistBackend backend) {
+  public VigilBlacklistService(VigilBlacklistBackend backend, Duration gracePeriod) {
     this.backend = backend;
+    this.gracePeriod = gracePeriod;
   }
 
   /**
@@ -56,6 +61,29 @@ public class VigilBlacklistService {
    */
   public boolean isBlacklisted(String token) {
     return backend.isBlacklisted(token);
+  }
+
+  /**
+   * Rotates a refresh token with grace period support.
+   *
+   * <p>During the grace period, the old token can still be reused (returns cached new tokens). This
+   * handles network issues where the client may not receive the new tokens.
+   *
+   * @param oldToken the rotated refresh token
+   * @param rotatedToken the rotation data with new tokens
+   */
+  public void rotate(String oldToken, RotatedToken rotatedToken) {
+    backend.rotate(oldToken, rotatedToken, gracePeriod);
+  }
+
+  /**
+   * Gets rotation data if the token was rotated and is within grace period.
+   *
+   * @param token the token to check
+   * @return rotation data if in grace period, empty if not rotated or grace expired
+   */
+  public Optional<RotatedToken> getRotation(String token) {
+    return backend.getRotation(token);
   }
 
   /**

@@ -34,7 +34,8 @@ class VigilTokenServiceTest {
             "vigil",
             "audience");
     blacklistService =
-        new VigilBlacklistService(new VigilProperties.Blacklist(1000, Duration.ofHours(1)));
+        new VigilBlacklistService(
+            new VigilProperties.Blacklist(1000, Duration.ofHours(1), Duration.ofSeconds(30)));
     tokenService = new VigilTokenService(jwtConfig, blacklistService);
   }
 
@@ -195,16 +196,20 @@ class VigilTokenServiceTest {
   class TokenRefresh {
 
     @Test
-    @DisplayName("Refresh tokens rotates old token")
-    void refreshTokensRotatesOldToken() {
+    @DisplayName("Refresh tokens generates new token pair")
+    void refreshTokensGeneratesNewTokenPair() {
       String refreshToken = tokenService.generateRefreshToken("dave");
 
       TokenRefreshResult result = tokenService.refreshTokens(refreshToken);
 
       assertThat(result.accessToken()).isNotBlank();
       assertThat(result.refreshToken()).isNotBlank();
-      // Old token is blacklisted (rotation)
-      assertThat(blacklistService.isBlacklisted(refreshToken)).isTrue();
+      // Access token should be different type than refresh token
+      Claims accessClaims = tokenService.validateAndGetClaims(result.accessToken());
+      Claims refreshClaims = tokenService.validateAndGetClaims(result.refreshToken());
+      assertThat(accessClaims.get("type")).isNull(); // access tokens don't have type
+      assertThat(refreshClaims.get("type")).isEqualTo("refresh");
+      // Note: Token rotation/blacklisting is now handled by VigilAuthService with grace period
     }
 
     @Test

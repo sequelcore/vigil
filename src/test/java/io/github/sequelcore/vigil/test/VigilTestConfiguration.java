@@ -51,7 +51,7 @@ public class VigilTestConfiguration {
   @Bean
   @Primary
   public VigilProperties.Blacklist testBlacklistProperties() {
-    return new VigilProperties.Blacklist(1000, Duration.ofHours(1));
+    return new VigilProperties.Blacklist(1000, Duration.ofHours(1), Duration.ofSeconds(30));
   }
 
   @Bean
