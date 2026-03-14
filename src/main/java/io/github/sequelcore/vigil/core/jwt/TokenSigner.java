@@ -6,9 +6,9 @@ import io.jsonwebtoken.JwtParserBuilder;
 /**
  * Strategy for JWT signing and parser configuration.
  *
- * <p>Implementations encapsulate algorithm-specific key handling: {@link HmacTokenSigner} for
- * HS256 and {@link RsaTokenSigner} for RS256. Auto-configuration selects the implementation based
- * on {@code vigil.jwt.algorithm}.
+ * <p>Implementations encapsulate algorithm-specific key handling: {@link HmacTokenSigner} for HS256
+ * and {@link RsaTokenSigner} for RS256. Auto-configuration selects the implementation based on
+ * {@code vigil.jwt.algorithm}.
  */
 public interface TokenSigner {
 

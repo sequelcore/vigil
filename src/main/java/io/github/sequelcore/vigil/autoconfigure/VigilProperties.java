@@ -87,15 +87,15 @@ public record VigilProperties(
   /**
    * JWT token configuration.
    *
-   * @param secret HMAC signing secret — minimum 32 characters per RFC 8725bis; required when
-   *     {@code algorithm=HS256}, ignored when {@code algorithm=RS256}
+   * @param secret HMAC signing secret — minimum 32 characters per RFC 8725bis; required when {@code
+   *     algorithm=HS256}, ignored when {@code algorithm=RS256}
    * @param accessTtl access token time-to-live
    * @param refreshTtl refresh token time-to-live
    * @param issuer optional token issuer claim ({@code iss}); validated on parse when set
    * @param audience optional token audience claim ({@code aud}); validated on parse when set
    * @param algorithm signing algorithm; defaults to {@link Algorithm#HS256}
-   * @param rsaPrivateKey PEM-encoded RSA private key — {@code file:/path}, {@code
-   *     classpath:path}, or inline PEM; required when {@code algorithm=RS256}
+   * @param rsaPrivateKey PEM-encoded RSA private key — {@code file:/path}, {@code classpath:path},
+   *     or inline PEM; required when {@code algorithm=RS256}
    * @param rsaPublicKey PEM-encoded RSA public key; required when {@code algorithm=RS256}
    */
   public record Jwt(

@@ -33,10 +33,13 @@ class PemKeyLoaderTest {
     originalPrivateKey = (RSAPrivateKey) pair.getPrivate();
     originalPublicKey = (RSAPublicKey) pair.getPublic();
 
-    String encodedPrivate = Base64.getMimeEncoder(64, new byte[]{'\n'}).encodeToString(originalPrivateKey.getEncoded());
+    String encodedPrivate =
+        Base64.getMimeEncoder(64, new byte[] {'\n'})
+            .encodeToString(originalPrivateKey.getEncoded());
     privatePem = "-----BEGIN PRIVATE KEY-----\n" + encodedPrivate + "\n-----END PRIVATE KEY-----";
 
-    String encodedPublic = Base64.getMimeEncoder(64, new byte[]{'\n'}).encodeToString(originalPublicKey.getEncoded());
+    String encodedPublic =
+        Base64.getMimeEncoder(64, new byte[] {'\n'}).encodeToString(originalPublicKey.getEncoded());
     publicPem = "-----BEGIN PUBLIC KEY-----\n" + encodedPublic + "\n-----END PUBLIC KEY-----";
   }
 
@@ -96,7 +99,10 @@ class PemKeyLoaderTest {
   @Test
   @DisplayName("loadPublicKey() throws on invalid PEM")
   void throwsOnInvalidPublicPem() {
-    assertThatThrownBy(() -> PemKeyLoader.loadPublicKey("-----BEGIN PUBLIC KEY-----\nbaddata\n-----END PUBLIC KEY-----"))
+    assertThatThrownBy(
+            () ->
+                PemKeyLoader.loadPublicKey(
+                    "-----BEGIN PUBLIC KEY-----\nbaddata\n-----END PUBLIC KEY-----"))
         .isInstanceOf(Exception.class);
   }
 

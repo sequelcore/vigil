@@ -16,12 +16,11 @@ import java.util.Map;
  *
  * <p>Uses an asymmetric key pair: the private key signs tokens, the public key verifies them. This
  * separates signing authority from verification — services can validate tokens using only the
- * public key (distributed via {@code /.well-known/jwks.json}) without the ability to mint new
- * ones.
+ * public key (distributed via {@code /.well-known/jwks.json}) without the ability to mint new ones.
  *
- * <p>A {@code kid} (key ID) derived from the public key fingerprint is added to every token
- * header, enabling key rotation: multiple public keys can be published in the JWKS, and the parser
- * resolves the correct key by {@code kid}.
+ * <p>A {@code kid} (key ID) derived from the public key fingerprint is added to every token header,
+ * enabling key rotation: multiple public keys can be published in the JWKS, and the parser resolves
+ * the correct key by {@code kid}.
  */
 public final class RsaTokenSigner implements TokenSigner {
 
@@ -32,8 +31,8 @@ public final class RsaTokenSigner implements TokenSigner {
   /**
    * Creates an RS256 signer from an RSA key pair.
    *
-   * <p>The {@code kid} is derived deterministically from the public key: SHA-256 of the
-   * DER-encoded public key, base64url-encoded, first 8 characters.
+   * <p>The {@code kid} is derived deterministically from the public key: SHA-256 of the DER-encoded
+   * public key, base64url-encoded, first 8 characters.
    *
    * @param privateKey RSA private key for signing
    * @param publicKey RSA public key for verification and JWKS export
@@ -66,12 +65,22 @@ public final class RsaTokenSigner implements TokenSigner {
    */
   public Map<String, Object> getJwk() {
     return Map.of(
-        "kty", "RSA",
-        "use", "sig",
-        "alg", "RS256",
-        "kid", kid,
-        "n", Base64.getUrlEncoder().withoutPadding().encodeToString(toUnsignedBytes(publicKey.getModulus())),
-        "e", Base64.getUrlEncoder().withoutPadding().encodeToString(toUnsignedBytes(publicKey.getPublicExponent())));
+        "kty",
+        "RSA",
+        "use",
+        "sig",
+        "alg",
+        "RS256",
+        "kid",
+        kid,
+        "n",
+        Base64.getUrlEncoder()
+            .withoutPadding()
+            .encodeToString(toUnsignedBytes(publicKey.getModulus())),
+        "e",
+        Base64.getUrlEncoder()
+            .withoutPadding()
+            .encodeToString(toUnsignedBytes(publicKey.getPublicExponent())));
   }
 
   /** Returns the key ID used in token headers and JWKS. */
@@ -90,8 +99,8 @@ public final class RsaTokenSigner implements TokenSigner {
   }
 
   /**
-   * Converts a BigInteger to an unsigned byte array, stripping the leading zero byte that Java
-   * uses to indicate a positive sign for two's complement representation.
+   * Converts a BigInteger to an unsigned byte array, stripping the leading zero byte that Java uses
+   * to indicate a positive sign for two's complement representation.
    */
   private static byte[] toUnsignedBytes(java.math.BigInteger n) {
     byte[] bytes = n.toByteArray();

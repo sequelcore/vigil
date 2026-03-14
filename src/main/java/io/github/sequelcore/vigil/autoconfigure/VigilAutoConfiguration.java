@@ -95,9 +95,7 @@ public class VigilAutoConfiguration {
   @Bean
   @ConditionalOnMissingBean
   public VigilTokenService vigilTokenService(
-      TokenSigner signer,
-      VigilProperties properties,
-      VigilBlacklistService blacklistService) {
+      TokenSigner signer, VigilProperties properties, VigilBlacklistService blacklistService) {
     return new VigilTokenService(signer, properties.jwt(), blacklistService);
   }
 
@@ -261,7 +259,8 @@ public class VigilAutoConfiguration {
     }
 
     FilterConfig filterConfig =
-        new FilterConfig(ignoredPaths, properties.filter().publicPaths(), properties.filter().profilePaths());
+        new FilterConfig(
+            ignoredPaths, properties.filter().publicPaths(), properties.filter().profilePaths());
 
     return new VigilAuthenticationFilter(
         tokenService,

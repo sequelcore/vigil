@@ -15,7 +15,8 @@ class VigilTokenServiceRfc8725Test {
   private static final String SECRET_32 = "this-is-a-valid-32-chars-secret!";
 
   private static VigilProperties.Jwt jwt(String secret, String issuer, String audience) {
-    return new VigilProperties.Jwt(secret, Duration.ofMinutes(15), Duration.ofDays(7), issuer, audience, null, null, null);
+    return new VigilProperties.Jwt(
+        secret, Duration.ofMinutes(15), Duration.ofDays(7), issuer, audience, null, null, null);
   }
 
   private static VigilTokenService service(VigilProperties.Jwt config) {
@@ -58,7 +59,8 @@ class VigilTokenServiceRfc8725Test {
     var svc = service(jwt(SECRET_32, "vigil-test", null));
     var otherSvc = service(jwt(SECRET_32, "other-issuer", null));
 
-    String token = otherSvc.generateAccessToken(TokenRequest.builder().subject("user@test.com").build());
+    String token =
+        otherSvc.generateAccessToken(TokenRequest.builder().subject("user@test.com").build());
 
     assertThatThrownBy(() -> svc.validateAndGetClaims(token))
         .isInstanceOf(IncorrectClaimException.class);
@@ -80,7 +82,8 @@ class VigilTokenServiceRfc8725Test {
     var svc = service(jwt(SECRET_32, null, "vigil-api"));
     var otherSvc = service(jwt(SECRET_32, null, "other-api"));
 
-    String token = otherSvc.generateAccessToken(TokenRequest.builder().subject("user@test.com").build());
+    String token =
+        otherSvc.generateAccessToken(TokenRequest.builder().subject("user@test.com").build());
 
     assertThatThrownBy(() -> svc.validateAndGetClaims(token))
         .isInstanceOf(IncorrectClaimException.class);

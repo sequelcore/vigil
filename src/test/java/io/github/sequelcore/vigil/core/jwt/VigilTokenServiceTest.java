@@ -39,7 +39,8 @@ class VigilTokenServiceTest {
     blacklistService =
         new VigilBlacklistService(
             new VigilProperties.Blacklist(1000, Duration.ofHours(1), Duration.ofSeconds(30)));
-    tokenService = new VigilTokenService(new HmacTokenSigner(jwtConfig.secret()), jwtConfig, blacklistService);
+    tokenService =
+        new VigilTokenService(new HmacTokenSigner(jwtConfig.secret()), jwtConfig, blacklistService);
   }
 
   @Test
@@ -283,7 +284,8 @@ class VigilTokenServiceTest {
     @Test
     @DisplayName("Refresh tokens works without blacklist")
     void refreshTokensWithoutBlacklist() {
-      VigilTokenService serviceWithoutBlacklist = new VigilTokenService(new HmacTokenSigner(jwtConfig.secret()), jwtConfig);
+      VigilTokenService serviceWithoutBlacklist =
+          new VigilTokenService(new HmacTokenSigner(jwtConfig.secret()), jwtConfig);
       String refreshToken = serviceWithoutBlacklist.generateRefreshToken("ivan");
 
       TokenRefreshResult result = serviceWithoutBlacklist.refreshTokens(refreshToken);
@@ -337,7 +339,8 @@ class VigilTokenServiceTest {
               null,
               null,
               null);
-      VigilTokenService minimalService = new VigilTokenService(new HmacTokenSigner(minimalConfig.secret()), minimalConfig);
+      VigilTokenService minimalService =
+          new VigilTokenService(new HmacTokenSigner(minimalConfig.secret()), minimalConfig);
 
       String token =
           minimalService.generateAccessToken(TokenRequest.builder().subject("jake").build());
