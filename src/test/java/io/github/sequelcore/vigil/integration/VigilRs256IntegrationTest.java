@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.sequelcore.vigil.autoconfigure.VigilProperties;
 import io.github.sequelcore.vigil.core.jwt.HmacTokenSigner;
-import io.github.sequelcore.vigil.core.jwt.RsaTokenSigner;
 import io.github.sequelcore.vigil.core.jwt.TokenRequest;
 import io.github.sequelcore.vigil.core.jwt.VigilTokenService;
 import io.github.sequelcore.vigil.integration.testapp.TestApplication;
@@ -42,25 +41,25 @@ class VigilRs256IntegrationTest {
 
   // Key pair is initialized in a static block so it's available to both
   // @DynamicPropertySource (runs before context start) and test methods.
-  private static final RSAPrivateKey privateKey;
-  private static final RSAPublicKey publicKey;
-  private static final String privatePem;
-  private static final String publicPem;
+  private static final RSAPrivateKey PRIVATE_KEY;
+  private static final RSAPublicKey PUBLIC_KEY;
+  private static final String PRIVATE_PEM;
+  private static final String PUBLIC_PEM;
 
   static {
     try {
       KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA");
       gen.initialize(2048);
       KeyPair pair = gen.generateKeyPair();
-      privateKey = (RSAPrivateKey) pair.getPrivate();
-      publicKey = (RSAPublicKey) pair.getPublic();
+      PRIVATE_KEY = (RSAPrivateKey) pair.getPrivate();
+      PUBLIC_KEY = (RSAPublicKey) pair.getPublic();
 
-      byte[] lineBreak = new byte[]{'\n'};
-      String enc64 = Base64.getMimeEncoder(64, lineBreak).encodeToString(privateKey.getEncoded());
-      privatePem = "-----BEGIN PRIVATE KEY-----\n" + enc64 + "\n-----END PRIVATE KEY-----";
+      byte[] lineBreak = new byte[] {'\n'};
+      String enc64 = Base64.getMimeEncoder(64, lineBreak).encodeToString(PRIVATE_KEY.getEncoded());
+      PRIVATE_PEM = "-----BEGIN PRIVATE KEY-----\n" + enc64 + "\n-----END PRIVATE KEY-----";
 
-      String pub64 = Base64.getMimeEncoder(64, lineBreak).encodeToString(publicKey.getEncoded());
-      publicPem = "-----BEGIN PUBLIC KEY-----\n" + pub64 + "\n-----END PUBLIC KEY-----";
+      String pub64 = Base64.getMimeEncoder(64, lineBreak).encodeToString(PUBLIC_KEY.getEncoded());
+      PUBLIC_PEM = "-----BEGIN PUBLIC KEY-----\n" + pub64 + "\n-----END PUBLIC KEY-----";
     } catch (Exception e) {
       throw new ExceptionInInitializerError(e);
     }
@@ -69,8 +68,8 @@ class VigilRs256IntegrationTest {
   @DynamicPropertySource
   static void rs256Properties(DynamicPropertyRegistry registry) {
     registry.add("vigil.jwt.algorithm", () -> "RS256");
-    registry.add("vigil.jwt.rsa-private-key", () -> privatePem);
-    registry.add("vigil.jwt.rsa-public-key", () -> publicPem);
+    registry.add("vigil.jwt.rsa-private-key", () -> PRIVATE_PEM);
+    registry.add("vigil.jwt.rsa-public-key", () -> PUBLIC_PEM);
     registry.add("vigil.jwt.secret", () -> "placeholder-not-used-for-rs256-signing");
     // Include JWKS endpoint in public-paths so Spring Security permits it without auth.
     // The Vigil filter also adds it to ignored-paths automatically for RS256.
@@ -108,7 +107,8 @@ class VigilRs256IntegrationTest {
     headers.setBearerAuth(token);
 
     ResponseEntity<String> response =
-        restTemplate.exchange(url("/protected/hello"), HttpMethod.GET, new HttpEntity<>(headers), String.class);
+        restTemplate.exchange(
+            url("/protected/hello"), HttpMethod.GET, new HttpEntity<>(headers), String.class);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo("rs256-user");
@@ -117,7 +117,8 @@ class VigilRs256IntegrationTest {
   @Test
   @DisplayName("Protected endpoint without token returns 401")
   void protectedEndpointWithoutTokenReturns401() {
-    ResponseEntity<String> response = restTemplate.getForEntity(url("/protected/hello"), String.class);
+    ResponseEntity<String> response =
+        restTemplate.getForEntity(url("/protected/hello"), String.class);
 
     assertThat(response.getStatusCode()).isIn(HttpStatus.UNAUTHORIZED, HttpStatus.FORBIDDEN);
   }
@@ -125,19 +126,21 @@ class VigilRs256IntegrationTest {
   @Test
   @DisplayName("JWKS endpoint is accessible without authentication")
   void jwksEndpointIsPublic() {
-    ResponseEntity<String> response = restTemplate.getForEntity(url("/.well-known/jwks.json"), String.class);
+    ResponseEntity<String> response =
+        restTemplate.getForEntity(url("/.well-known/jwks.json"), String.class);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
   }
 
   @Test
   @DisplayName("JWKS endpoint returns valid RSA JWK set")
+  @SuppressWarnings("unchecked")
   void jwksEndpointReturnsValidJwkSet() {
-    ResponseEntity<java.util.Map> response = restTemplate.getForEntity(url("/.well-known/jwks.json"), java.util.Map.class);
+    ResponseEntity<java.util.Map> response =
+        restTemplate.getForEntity(url("/.well-known/jwks.json"), java.util.Map.class);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).containsKey("keys");
-    @SuppressWarnings("unchecked")
     var keys = (java.util.List<java.util.Map<String, Object>>) response.getBody().get("keys");
     assertThat(keys).hasSize(1);
     var jwk = keys.get(0);
@@ -151,7 +154,8 @@ class VigilRs256IntegrationTest {
   @Test
   @DisplayName("JWKS response has Cache-Control: public header")
   void jwksHasCacheControlHeader() {
-    ResponseEntity<String> response = restTemplate.getForEntity(url("/.well-known/jwks.json"), String.class);
+    ResponseEntity<String> response =
+        restTemplate.getForEntity(url("/.well-known/jwks.json"), String.class);
 
     String cacheControl = response.getHeaders().getCacheControl();
     assertThat(cacheControl).isNotNull();
@@ -161,7 +165,6 @@ class VigilRs256IntegrationTest {
   @Test
   @DisplayName("HS256 token is rejected when RS256 is configured")
   void hs256TokenRejectedWithRs256Config() {
-    // Sign a token with HMAC — it has no kid header matching the RS256 signer
     String hmacSecret = "fallback-hmac-secret-for-testing-32chars";
     Instant now = Instant.now();
     String hmacToken =
@@ -176,7 +179,8 @@ class VigilRs256IntegrationTest {
     headers.setBearerAuth(hmacToken);
 
     ResponseEntity<String> response =
-        restTemplate.exchange(url("/protected/hello"), HttpMethod.GET, new HttpEntity<>(headers), String.class);
+        restTemplate.exchange(
+            url("/protected/hello"), HttpMethod.GET, new HttpEntity<>(headers), String.class);
 
     assertThat(response.getStatusCode()).isIn(HttpStatus.UNAUTHORIZED, HttpStatus.FORBIDDEN);
   }

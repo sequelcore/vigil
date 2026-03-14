@@ -12,7 +12,6 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 
 class JwksControllerTest {
