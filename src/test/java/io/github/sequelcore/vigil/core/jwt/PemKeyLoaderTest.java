@@ -90,6 +90,28 @@ class PemKeyLoaderTest {
   }
 
   @Test
+  @DisplayName("loadPrivateKey() loads from inline PEM with escaped \\n (env var format)")
+  void loadsPrivateKeyFromEscapedNewlinePem() {
+    String envVarStyle = privatePem.replace("\n", "\\n");
+
+    RSAPrivateKey key = PemKeyLoader.loadPrivateKey(envVarStyle);
+
+    assertThat(key).isNotNull();
+    assertThat(key.getEncoded()).isEqualTo(originalPrivateKey.getEncoded());
+  }
+
+  @Test
+  @DisplayName("loadPublicKey() loads from inline PEM with escaped \\n (env var format)")
+  void loadsPublicKeyFromEscapedNewlinePem() {
+    String envVarStyle = publicPem.replace("\n", "\\n");
+
+    RSAPublicKey key = PemKeyLoader.loadPublicKey(envVarStyle);
+
+    assertThat(key).isNotNull();
+    assertThat(key.getEncoded()).isEqualTo(originalPublicKey.getEncoded());
+  }
+
+  @Test
   @DisplayName("loadPrivateKey() throws on invalid PEM")
   void throwsOnInvalidPrivatePem() {
     assertThatThrownBy(() -> PemKeyLoader.loadPrivateKey("not-a-pem-at-all"))

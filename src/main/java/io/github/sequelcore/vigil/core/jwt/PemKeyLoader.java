@@ -89,8 +89,11 @@ public final class PemKeyLoader {
   }
 
   private static byte[] decodePem(String pem) {
+    // Normalize escaped newlines that arrive from env vars (literal \n → real newline)
+    String normalized = pem.replace("\\n", "\n");
     String stripped =
-        pem.replaceAll("-----BEGIN [^-]+-----", "")
+        normalized
+            .replaceAll("-----BEGIN [^-]+-----", "")
             .replaceAll("-----END [^-]+-----", "")
             .replaceAll("\\s+", "");
     return Base64.getDecoder().decode(stripped);
