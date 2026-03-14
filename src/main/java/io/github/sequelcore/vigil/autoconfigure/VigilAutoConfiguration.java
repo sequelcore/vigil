@@ -6,15 +6,21 @@ import io.github.sequelcore.vigil.auth.VigilResetTokenService;
 import io.github.sequelcore.vigil.blacklist.VigilBlacklistService;
 import io.github.sequelcore.vigil.context.VigilContextPopulator;
 import io.github.sequelcore.vigil.core.cookie.VigilCookieService;
+import io.github.sequelcore.vigil.core.jwt.HmacTokenSigner;
+import io.github.sequelcore.vigil.core.jwt.PemKeyLoader;
+import io.github.sequelcore.vigil.core.jwt.RsaTokenSigner;
+import io.github.sequelcore.vigil.core.jwt.TokenSigner;
 import io.github.sequelcore.vigil.core.jwt.VigilTokenService;
 import io.github.sequelcore.vigil.core.password.VigilPasswordService;
 import io.github.sequelcore.vigil.entrypoint.VigilAuthenticationEntryPoint;
 import io.github.sequelcore.vigil.filter.FilterConfig;
 import io.github.sequelcore.vigil.filter.VigilAuthenticationFilter;
+import io.github.sequelcore.vigil.jwks.JwksController;
 import io.github.sequelcore.vigil.protection.VigilProtectionService;
 import io.github.sequelcore.vigil.session.VigilSessionProvider;
 import io.github.sequelcore.vigil.session.VigilSessionService;
 import io.github.sequelcore.vigil.tenant.VigilTenantService;
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -32,6 +38,7 @@ import org.springframework.security.web.AuthenticationEntryPoint;
  * <ul>
  *   <li>Multi-tenancy: {@code vigil.tenant.enabled=true}
  *   <li>Session auth: {@code vigil.session.enabled=true}
+ *   <li>RS256 + JWKS: {@code vigil.jwt.algorithm=RS256}
  * </ul>
  */
 @AutoConfiguration
@@ -40,6 +47,30 @@ public class VigilAutoConfiguration {
 
   /** Creates the Vigil auto-configuration. */
   public VigilAutoConfiguration() {}
+
+  /**
+   * Creates the token signer based on the configured algorithm.
+   *
+   * <ul>
+   *   <li>{@code HS256} (default): {@link HmacTokenSigner} using the configured secret
+   *   <li>{@code RS256}: {@link RsaTokenSigner} loading keys from configured PEM sources
+   * </ul>
+   *
+   * @param properties the loaded Vigil properties
+   * @return the configured token signer
+   */
+  @Bean
+  @ConditionalOnMissingBean
+  public TokenSigner tokenSigner(VigilProperties properties) {
+    VigilProperties.Jwt jwt = properties.jwt();
+    return switch (jwt.algorithm()) {
+      case HS256 -> new HmacTokenSigner(jwt.secret());
+      case RS256 ->
+          new RsaTokenSigner(
+              PemKeyLoader.loadPrivateKey(jwt.rsaPrivateKey()),
+              PemKeyLoader.loadPublicKey(jwt.rsaPublicKey()));
+    };
+  }
 
   /**
    * Creates the blacklist service for token invalidation.
@@ -56,6 +87,7 @@ public class VigilAutoConfiguration {
   /**
    * Creates the token service for JWT generation and validation.
    *
+   * @param signer the token signer
    * @param properties the loaded Vigil properties
    * @param blacklistService the blacklist service for token rotation
    * @return configured token service
@@ -63,8 +95,10 @@ public class VigilAutoConfiguration {
   @Bean
   @ConditionalOnMissingBean
   public VigilTokenService vigilTokenService(
-      VigilProperties properties, VigilBlacklistService blacklistService) {
-    return new VigilTokenService(properties.jwt(), blacklistService);
+      TokenSigner signer,
+      VigilProperties properties,
+      VigilBlacklistService blacklistService) {
+    return new VigilTokenService(signer, properties.jwt(), blacklistService);
   }
 
   /**
@@ -180,10 +214,25 @@ public class VigilAutoConfiguration {
   }
 
   /**
+   * Creates the JWKS controller when RS256 is configured.
+   *
+   * <p>Exposes {@code /.well-known/jwks.json} so consumers (e.g., Kiln gateway) can fetch the RSA
+   * public key for token verification without holding the private key.
+   *
+   * @param signer the RS256 signer whose public key is published
+   * @return the JWKS controller
+   */
+  @Bean
+  @ConditionalOnProperty(prefix = "vigil.jwt", name = "algorithm", havingValue = "RS256")
+  public JwksController jwksController(RsaTokenSigner signer) {
+    return new JwksController(signer);
+  }
+
+  /**
    * Creates the authentication filter.
    *
-   * <p>This filter is always registered and cannot be replaced. Applications customize
-   * authentication behavior via {@link VigilContextPopulator} implementations.
+   * <p>When RS256 is active, {@code /.well-known/jwks.json} is automatically added to the ignored
+   * paths so the public key endpoint requires no authentication.
    *
    * @param properties the loaded Vigil properties
    * @param tokenService the token service for JWT validation
@@ -205,11 +254,15 @@ public class VigilAutoConfiguration {
       @Nullable VigilSessionService sessionService,
       @Nullable VigilSessionProvider<?> sessionProvider,
       List<VigilContextPopulator> contextPopulators) {
+
+    List<String> ignoredPaths = new ArrayList<>(properties.filter().ignoredPaths());
+    if (properties.jwt().algorithm() == VigilProperties.Jwt.Algorithm.RS256) {
+      ignoredPaths.add("/.well-known/jwks.json");
+    }
+
     FilterConfig filterConfig =
-        new FilterConfig(
-            properties.filter().ignoredPaths(),
-            properties.filter().publicPaths(),
-            properties.filter().profilePaths());
+        new FilterConfig(ignoredPaths, properties.filter().publicPaths(), properties.filter().profilePaths());
+
     return new VigilAuthenticationFilter(
         tokenService,
         cookieService,

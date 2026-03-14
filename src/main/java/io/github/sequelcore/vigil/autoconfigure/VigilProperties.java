@@ -1,6 +1,5 @@
 package io.github.sequelcore.vigil.autoconfigure;
 
-import jakarta.validation.constraints.NotBlank;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
@@ -52,7 +51,9 @@ public record VigilProperties(
    */
   public VigilProperties {
     if (jwt == null) {
-      jwt = new Jwt(null, Duration.ofMinutes(15), Duration.ofDays(7), null, null);
+      throw new IllegalArgumentException(
+          "vigil.jwt must be configured. Set vigil.jwt.secret (HS256) or"
+              + " vigil.jwt.algorithm=RS256 with rsa-private-key and rsa-public-key.");
     }
     if (cookie == null) {
       cookie = new Cookie(true, "Lax", true, null);
@@ -86,40 +87,79 @@ public record VigilProperties(
   /**
    * JWT token configuration.
    *
-   * @param secret the signing secret (minimum 32 characters per RFC 8725bis)
+   * @param secret HMAC signing secret — minimum 32 characters per RFC 8725bis; required when
+   *     {@code algorithm=HS256}, ignored when {@code algorithm=RS256}
    * @param accessTtl access token time-to-live
    * @param refreshTtl refresh token time-to-live
-   * @param issuer optional token issuer claim
-   * @param audience optional token audience claim
+   * @param issuer optional token issuer claim ({@code iss}); validated on parse when set
+   * @param audience optional token audience claim ({@code aud}); validated on parse when set
+   * @param algorithm signing algorithm; defaults to {@link Algorithm#HS256}
+   * @param rsaPrivateKey PEM-encoded RSA private key — {@code file:/path}, {@code
+   *     classpath:path}, or inline PEM; required when {@code algorithm=RS256}
+   * @param rsaPublicKey PEM-encoded RSA public key; required when {@code algorithm=RS256}
    */
   public record Jwt(
-      @NotBlank String secret,
+      String secret,
       Duration accessTtl,
       Duration refreshTtl,
       String issuer,
-      String audience) {
+      String audience,
+      Algorithm algorithm,
+      String rsaPrivateKey,
+      String rsaPublicKey) {
+
+    /** JWT signing algorithm. */
+    public enum Algorithm {
+      /** HMAC-SHA256. Symmetric — any secret holder can sign and verify. */
+      HS256,
+
+      /**
+       * RSA-SHA256. Asymmetric — private key signs, public key verifies. Enables JWKS distribution
+       * and key rotation without sharing the signing secret.
+       */
+      RS256
+    }
+
     /**
-     * Applies defaults and validates configuration.
+     * Applies defaults and validates algorithm-specific requirements.
      *
-     * @param secret the signing secret
-     * @param accessTtl access token time-to-live
-     * @param refreshTtl refresh token time-to-live
-     * @param issuer optional token issuer claim
-     * @param audience optional token audience claim
+     * @param secret HMAC secret
+     * @param accessTtl access TTL
+     * @param refreshTtl refresh TTL
+     * @param issuer issuer claim
+     * @param audience audience claim
+     * @param algorithm signing algorithm
+     * @param rsaPrivateKey RSA private key PEM
+     * @param rsaPublicKey RSA public key PEM
      */
     public Jwt {
-      // RFC 8725bis: Minimum 256 bits (32 bytes) for HMAC-SHA algorithms
-      if (secret != null && secret.length() < 32) {
-        throw new IllegalArgumentException(
-            "JWT secret must be at least 32 characters (256 bits) per RFC 8725bis. Current length: "
-                + secret.length());
+      if (algorithm == null) {
+        algorithm = Algorithm.HS256;
       }
-
       if (accessTtl == null) {
         accessTtl = Duration.ofMinutes(15);
       }
       if (refreshTtl == null) {
         refreshTtl = Duration.ofDays(7);
+      }
+
+      if (algorithm == Algorithm.HS256) {
+        if (secret == null || secret.length() < 32) {
+          throw new IllegalArgumentException(
+              "vigil.jwt.secret must be at least 32 characters (256 bits) per RFC 8725bis."
+                  + (secret != null ? " Current length: " + secret.length() : " Value is null."));
+        }
+      }
+
+      if (algorithm == Algorithm.RS256) {
+        if (rsaPrivateKey == null || rsaPrivateKey.isBlank()) {
+          throw new IllegalArgumentException(
+              "vigil.jwt.rsa-private-key is required when vigil.jwt.algorithm=RS256");
+        }
+        if (rsaPublicKey == null || rsaPublicKey.isBlank()) {
+          throw new IllegalArgumentException(
+              "vigil.jwt.rsa-public-key is required when vigil.jwt.algorithm=RS256");
+        }
       }
     }
   }

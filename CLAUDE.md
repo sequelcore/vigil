@@ -8,7 +8,7 @@
 |-------|-------|
 | Group ID | io.github.sequelcore |
 | Artifact ID | vigil-spring-boot-starter |
-| Version | 4.1.0 |
+| Version | 5.0.0 |
 | Java | 21 |
 | Spring Boot | 3.5.x |
 
@@ -24,6 +24,7 @@ Vigil handles **token lifecycle**, not **user lifecycle**.
 - Request authentication via filter
 - Multi-tenant context
 - Guest sessions
+- RS256 asymmetric signing + JWKS public key distribution
 
 **What Vigil does NOT do:**
 - User storage or lookup
@@ -46,20 +47,40 @@ This follows the same pattern as Auth0/Okta starters: validate tokens, delegate 
 
 ```
 io.github.sequelcore.vigil/
-├── autoconfigure/           # Spring Boot auto-configuration
+├── autoconfigure/           # Spring Boot auto-configuration + VigilProperties
 ├── auth/                    # VigilAuthService, VigilResetTokenService
 ├── blacklist/               # Token blacklist (Caffeine)
 ├── context/                 # VigilContextPopulator interface
 ├── core/
 │   ├── cookie/              # VigilCookieService
-│   ├── jwt/                 # VigilTokenService, TokenRequest, VigilTokenClaims
+│   ├── jwt/                 # VigilTokenService, TokenSigner, HmacTokenSigner,
+│   │                        # RsaTokenSigner, PemKeyLoader, TokenRequest, VigilTokenClaims
 │   └── password/            # VigilPasswordService, PasswordStrength
 ├── entrypoint/              # VigilAuthenticationEntryPoint (RFC 6750)
 ├── filter/                  # VigilAuthenticationFilter
+├── jwks/                    # JwksController (/.well-known/jwks.json, RS256 only)
 ├── protection/              # VigilProtectionService (brute-force)
 ├── session/                 # VigilSessionService, VigilSessionProvider
 └── tenant/                  # VigilTenantService, VigilTenantContext
 ```
+
+## Signing Architecture
+
+`TokenSigner` is a strategy interface with two implementations:
+
+| Implementation | Algorithm | When active |
+|----------------|-----------|-------------|
+| `HmacTokenSigner` | HS256 | `algorithm` omitted or `HS256` (default) |
+| `RsaTokenSigner` | RS256 | `algorithm: RS256` |
+
+`VigilAutoConfiguration` selects the correct implementation based on `vigil.jwt.algorithm` and registers it as a `TokenSigner` bean. `VigilTokenService` receives the signer via constructor injection and delegates all sign/verify operations to it.
+
+`RsaTokenSigner` computes a deterministic `kid` (SHA-256 of public key DER, base64url, first 8 chars) added to every token header. `JwksController` exposes the public key at `/.well-known/jwks.json` per RFC 7517, cached with `Cache-Control: public, max-age=3600`.
+
+`PemKeyLoader` accepts three source formats:
+- `file:/absolute/path/to/key.pem`
+- `classpath:path/to/key.pem`
+- Inline PEM string (PKCS#8 private, X.509 public)
 
 ## Services
 
@@ -121,20 +142,57 @@ The app validates credentials, Vigil handles token orchestration.
 
 | Interface | Purpose |
 |-----------|---------|
+| `TokenSigner` | Strategy for JWT signing and parser configuration (HS256 / RS256) |
 | `VigilSessionProvider<T>` | Application implements for guest session lookup |
 | `VigilContextPopulator` | Application implements for custom security context |
 | `VigilBlacklistBackend` | Implement for Redis/DB blacklist storage |
 
 ## Configuration
 
+### HS256 (default)
+
 ```yaml
 vigil:
   jwt:
-    secret: your-256-bit-secret-key-here
+    secret: ${JWT_SECRET}        # Required: min 32 chars (RFC 8725bis)
     access-ttl: 15m
     refresh-ttl: 7d
-    issuer: your-app-name    # Optional
-    audience: your-audience  # Optional
+    issuer: your-app             # Optional — validated on parse when set
+    audience: your-audience      # Optional — validated on parse when set
+```
+
+### RS256
+
+```yaml
+vigil:
+  jwt:
+    algorithm: RS256
+    rsa-private-key: ${RSA_PRIVATE_KEY}   # PEM: file:/path, classpath:path, or inline
+    rsa-public-key: ${RSA_PUBLIC_KEY}
+    issuer: your-app
+    audience: your-audience
+    access-ttl: 15m
+    refresh-ttl: 7d
+```
+
+When `algorithm: RS256`:
+- `secret` is not required and is ignored
+- `GET /.well-known/jwks.json` is auto-registered (no auth)
+- Every token header includes `kid` for key rotation
+
+### Full Reference
+
+```yaml
+vigil:
+  jwt:
+    secret: your-256-bit-secret-key-here   # HS256 only
+    algorithm: HS256                        # HS256 (default) or RS256
+    rsa-private-key: ${RSA_PRIVATE_KEY}     # RS256 only
+    rsa-public-key: ${RSA_PUBLIC_KEY}       # RS256 only
+    access-ttl: 15m
+    refresh-ttl: 7d
+    issuer: your-app-name
+    audience: your-audience
 
   auth:
     realm: your-app-name     # For WWW-Authenticate header (RFC 6750)
@@ -170,6 +228,11 @@ vigil:
 
   session:
     enabled: false
+    cookie-name: session_token
+    ttl: 30m
+
+  reset:
+    ttl: 1h
 ```
 
 ### Grace Period for Token Rotation

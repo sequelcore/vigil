@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.sequelcore.vigil.autoconfigure.VigilProperties;
 import io.github.sequelcore.vigil.blacklist.VigilBlacklistService;
+import io.github.sequelcore.vigil.core.jwt.HmacTokenSigner;
 import io.github.sequelcore.vigil.core.jwt.TokenRequest;
 import io.github.sequelcore.vigil.core.jwt.VigilTokenService;
 import io.github.sequelcore.vigil.integration.testapp.TestApplication;
@@ -197,12 +198,12 @@ class VigilIntegrationTest {
 
   private String expiredAccessToken() {
     Instant now = Instant.now();
-    return Jwts.builder()
-        .subject("expired-user")
-        .issuedAt(Date.from(now.minusSeconds(120)))
-        .expiration(Date.from(now.minusSeconds(60)))
-        .signWith(tokenService.getSigningKey())
-        .compact();
+    return new HmacTokenSigner(properties.jwt().secret())
+        .sign(
+            Jwts.builder()
+                .subject("expired-user")
+                .issuedAt(Date.from(now.minusSeconds(120)))
+                .expiration(Date.from(now.minusSeconds(60))));
   }
 
   private String url(String path) {

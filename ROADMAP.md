@@ -15,6 +15,7 @@ Vigil handles **token lifecycle**, not **user lifecycle**.
 | Standard | Description | Target |
 |----------|-------------|--------|
 | RFC 7519 | JWT Specification | v1.0.0 |
+| RFC 7517 | JSON Web Key (JWK) | v5.0.0 |
 | RFC 6749 | OAuth 2.0 Token Refresh | v3.1.0 |
 | RFC 6750 | Bearer Token Usage | v2.7.0 |
 | RFC 8252 | OAuth 2.0 for Native Apps | v3.1.0 |
@@ -110,7 +111,7 @@ Native apps (iOS, Android) and APIs use Authorization headers per RFC 8252.
 - **Optional session enrichment** - Public paths can now show user info when logged in
 
 Breaking changes:
-- `public-paths` behavior changed - previously skipped all auth, now attempts auth if credentials present
+- `public-paths` behavior changed — previously skipped all auth, now attempts auth if credentials present
 - Apps relying on old `public-paths` behavior should move those paths to `ignored-paths`
 
 | Path Type | Credentials | v3.x Behavior | v4.0 Behavior |
@@ -139,7 +140,7 @@ vigil:
       - /api/public/**
 ```
 
-### v4.1.0 - Grace Period for Token Rotation (Current)
+### v4.1.0 - Grace Period for Token Rotation
 - **`grace-period` config** - Configurable reuse window for rotated refresh tokens (default 30s, max 60s)
 - **Race condition fix** - Handles client crashes/network issues during token refresh
 - **Industry standard** - Same pattern as Auth0/Okta refresh token rotation with reuse detection
@@ -155,11 +156,30 @@ vigil:
     grace-period: 30s   # 0-60 seconds
 ```
 
+### v5.0.0 - RS256 & JWKS (Current)
+- **`algorithm` config** - `HS256` (default, unchanged) or `RS256` (opt-in)
+- **`RsaTokenSigner`** - RSA-SHA256 signing with private key; verification with public key
+- **`HmacTokenSigner`** - HS256 extracted into strategy; zero behavior change for existing deployments
+- **`TokenSigner` interface** - Strategy pattern enabling clean algorithm selection and future extension (ES256)
+- **`PemKeyLoader`** - Load RSA keys from `file:` path, `classpath:` resource, or inline PEM string
+- **`kid` header** - Deterministic key ID (SHA-256 of public key DER, base64url, first 8 chars) on every RS256 token
+- **JWKS endpoint** - `GET /.well-known/jwks.json` per RFC 7517; auto-registered when `algorithm=RS256`
+- **Auto-excluded path** - `/.well-known/jwks.json` added to `ignored-paths` automatically; no auth required
+- **Cache-Control** - JWKS response includes `public, max-age=3600`
+
+Breaking changes (direct instantiation only; YAML-configured apps are unaffected):
+- `VigilProperties.Jwt` canonical constructor expanded from 5 to 8 fields (`algorithm`, `rsaPrivateKey`, `rsaPublicKey` added)
+- `VigilTokenService` constructors require `TokenSigner` as first argument; `getSigningKey()` removed
+
+What this unlocks:
+- **Gateway verification** — API gateways (e.g., Kiln) can validate tokens by fetching JWKS without holding the signing secret
+- **Zero-trust inter-service auth** — Services verify tokens with only the public key
+- **Key rotation** — Publish old + new public keys in JWKS simultaneously; remove old key after one TTL cycle
+
 ---
 
 ## Future
 
-- Key rotation (`kid` header, JWKS)
-- Asymmetric keys (RS256, ES256)
 - Redis adapters for blacklist/protection
+- ES256 (ECDSA) signing via `TokenSigner` extension point
 - DPoP support (RFC 9449)

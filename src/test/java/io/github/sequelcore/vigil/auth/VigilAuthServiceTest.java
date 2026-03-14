@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 import io.github.sequelcore.vigil.autoconfigure.VigilProperties;
 import io.github.sequelcore.vigil.blacklist.VigilBlacklistService;
 import io.github.sequelcore.vigil.core.cookie.VigilCookieService;
+import io.github.sequelcore.vigil.core.jwt.HmacTokenSigner;
 import io.github.sequelcore.vigil.core.jwt.TokenRequest;
 import io.github.sequelcore.vigil.core.jwt.VigilTokenService;
 import io.github.sequelcore.vigil.tenant.VigilTenantContext;
@@ -42,7 +43,7 @@ class VigilAuthServiceTest {
   void setUp() {
     MockitoAnnotations.openMocks(this);
     jwtConfig =
-        new VigilProperties.Jwt(SECRET, Duration.ofMinutes(15), Duration.ofDays(7), null, null);
+        new VigilProperties.Jwt(SECRET, Duration.ofMinutes(15), Duration.ofDays(7), null, null, null, null, null);
     cookieConfig =
         new VigilProperties.Cookie(
             true,
@@ -53,7 +54,7 @@ class VigilAuthServiceTest {
     VigilProperties.Blacklist blacklistConfig =
         new VigilProperties.Blacklist(10000, Duration.ofHours(24), Duration.ofSeconds(30));
     blacklistService = new VigilBlacklistService(blacklistConfig);
-    tokenService = new VigilTokenService(jwtConfig, blacklistService);
+    tokenService = new VigilTokenService(new HmacTokenSigner(jwtConfig.secret()), jwtConfig, blacklistService);
     cookieService = new VigilCookieService(cookieConfig, jwtConfig);
     authService = new VigilAuthService(tokenService, cookieService, blacklistService);
   }

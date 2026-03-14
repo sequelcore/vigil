@@ -3,6 +3,7 @@ package io.github.sequelcore.vigil.test;
 import io.github.sequelcore.vigil.autoconfigure.VigilProperties;
 import io.github.sequelcore.vigil.blacklist.VigilBlacklistService;
 import io.github.sequelcore.vigil.core.cookie.VigilCookieService;
+import io.github.sequelcore.vigil.core.jwt.HmacTokenSigner;
 import io.github.sequelcore.vigil.core.jwt.VigilTokenService;
 import io.github.sequelcore.vigil.core.password.VigilPasswordService;
 import io.github.sequelcore.vigil.protection.VigilProtectionService;
@@ -35,7 +36,7 @@ public class VigilTestConfiguration {
   @Primary
   public VigilProperties.Jwt testJwtProperties() {
     return new VigilProperties.Jwt(
-        TEST_SECRET, Duration.ofMinutes(15), Duration.ofDays(7), "vigil-test", null);
+        TEST_SECRET, Duration.ofMinutes(15), Duration.ofDays(7), "vigil-test", null, null, null, null);
   }
 
   @Bean
@@ -81,7 +82,7 @@ public class VigilTestConfiguration {
   @Bean
   @Primary
   public VigilTokenService testTokenService() {
-    return new VigilTokenService(testJwtProperties(), testBlacklistService());
+    return new VigilTokenService(new HmacTokenSigner(TEST_SECRET), testJwtProperties(), testBlacklistService());
   }
 
   @Bean

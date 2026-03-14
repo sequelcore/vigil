@@ -36,6 +36,9 @@ class VigilSessionServiceTest {
             Duration.ofMinutes(15),
             Duration.ofDays(7),
             null,
+            null,
+            null,
+            null,
             null);
     VigilProperties.Cookie cookieConfig =
         new VigilProperties.Cookie(
