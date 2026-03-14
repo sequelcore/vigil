@@ -32,11 +32,15 @@ class VigilTokenServiceTest {
             Duration.ofMinutes(15),
             Duration.ofDays(7),
             "vigil",
-            "audience");
+            "audience",
+            null,
+            null,
+            null);
     blacklistService =
         new VigilBlacklistService(
             new VigilProperties.Blacklist(1000, Duration.ofHours(1), Duration.ofSeconds(30)));
-    tokenService = new VigilTokenService(jwtConfig, blacklistService);
+    tokenService =
+        new VigilTokenService(new HmacTokenSigner(jwtConfig.secret()), jwtConfig, blacklistService);
   }
 
   @Test
@@ -125,12 +129,12 @@ class VigilTokenServiceTest {
 
   private String buildExpiredToken(String subject) {
     Instant now = Instant.now();
-    return Jwts.builder()
-        .subject(subject)
-        .issuedAt(Date.from(now.minusSeconds(120)))
-        .expiration(Date.from(now.minusSeconds(60)))
-        .signWith(tokenService.getSigningKey())
-        .compact();
+    return new HmacTokenSigner(jwtConfig.secret())
+        .sign(
+            Jwts.builder()
+                .subject(subject)
+                .issuedAt(Date.from(now.minusSeconds(120)))
+                .expiration(Date.from(now.minusSeconds(60))));
   }
 
   @Nested
@@ -280,7 +284,8 @@ class VigilTokenServiceTest {
     @Test
     @DisplayName("Refresh tokens works without blacklist")
     void refreshTokensWithoutBlacklist() {
-      VigilTokenService serviceWithoutBlacklist = new VigilTokenService(jwtConfig);
+      VigilTokenService serviceWithoutBlacklist =
+          new VigilTokenService(new HmacTokenSigner(jwtConfig.secret()), jwtConfig);
       String refreshToken = serviceWithoutBlacklist.generateRefreshToken("ivan");
 
       TokenRefreshResult result = serviceWithoutBlacklist.refreshTokens(refreshToken);
@@ -330,8 +335,12 @@ class VigilTokenServiceTest {
               Duration.ofMinutes(15),
               Duration.ofDays(7),
               null,
+              null,
+              null,
+              null,
               null);
-      VigilTokenService minimalService = new VigilTokenService(minimalConfig);
+      VigilTokenService minimalService =
+          new VigilTokenService(new HmacTokenSigner(minimalConfig.secret()), minimalConfig);
 
       String token =
           minimalService.generateAccessToken(TokenRequest.builder().subject("jake").build());

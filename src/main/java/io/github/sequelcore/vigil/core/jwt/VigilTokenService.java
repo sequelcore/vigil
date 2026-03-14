@@ -7,33 +7,42 @@ import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.JwtParserBuilder;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
-import javax.crypto.SecretKey;
-import lombok.Getter;
 import org.springframework.lang.Nullable;
 
 /** Service for JWT token generation, validation, and refresh with rotation. */
 public class VigilTokenService {
 
   private final VigilProperties.Jwt jwtConfig;
-  @Getter private final SecretKey signingKey;
+  private final TokenSigner signer;
   @Nullable private final VigilBlacklistService blacklistService;
 
-  /** Creates token service without blacklist (refresh rotation disabled). */
-  public VigilTokenService(VigilProperties.Jwt jwtConfig) {
-    this(jwtConfig, null);
+  /**
+   * Creates token service without blacklist (refresh rotation disabled).
+   *
+   * @param signer the signing strategy (HS256 or RS256)
+   * @param jwtConfig JWT configuration (TTLs, issuer, audience)
+   */
+  public VigilTokenService(TokenSigner signer, VigilProperties.Jwt jwtConfig) {
+    this(signer, jwtConfig, null);
   }
 
-  /** Creates token service with blacklist for refresh rotation. */
+  /**
+   * Creates token service with blacklist for refresh rotation.
+   *
+   * @param signer the signing strategy (HS256 or RS256)
+   * @param jwtConfig JWT configuration (TTLs, issuer, audience)
+   * @param blacklistService blacklist service for token invalidation
+   */
   public VigilTokenService(
-      VigilProperties.Jwt jwtConfig, @Nullable VigilBlacklistService blacklistService) {
+      TokenSigner signer,
+      VigilProperties.Jwt jwtConfig,
+      @Nullable VigilBlacklistService blacklistService) {
+    this.signer = signer;
     this.jwtConfig = jwtConfig;
-    this.signingKey = Keys.hmacShaKeyFor(jwtConfig.secret().getBytes(StandardCharsets.UTF_8));
     this.blacklistService = blacklistService;
   }
 
@@ -41,7 +50,7 @@ public class VigilTokenService {
    * Generates an access token.
    *
    * @param request token request with subject, claims, and optional custom TTL
-   * @return the JWT access token
+   * @return the signed JWT access token
    */
   public String generateAccessToken(TokenRequest request) {
     long ttlMs =
@@ -55,7 +64,7 @@ public class VigilTokenService {
    * Generates a refresh token.
    *
    * @param subject the token subject
-   * @return the JWT refresh token
+   * @return the signed JWT refresh token
    */
   public String generateRefreshToken(String subject) {
     return generateToken(
@@ -67,7 +76,7 @@ public class VigilTokenService {
    * Generates a refresh token with claims.
    *
    * @param request token request (claims will have type=refresh added)
-   * @return the JWT refresh token
+   * @return the signed JWT refresh token
    */
   public String generateRefreshToken(TokenRequest request) {
     long ttlMs =
@@ -85,9 +94,6 @@ public class VigilTokenService {
   /**
    * Refreshes tokens with rotation.
    *
-   * <p>Validates the refresh token, blacklists it (rotation), and generates new access + refresh
-   * tokens.
-   *
    * @param refreshToken the current refresh token
    * @return new token pair with expiration times
    * @throws JwtException if refresh token is invalid or not a refresh token
@@ -99,8 +105,8 @@ public class VigilTokenService {
   /**
    * Refreshes tokens with rotation and updated claims.
    *
-   * <p>Note: This method only generates new tokens. Token rotation (blacklisting the old token) is
-   * handled by {@link io.github.sequelcore.vigil.auth.VigilAuthService} with grace period support.
+   * <p>Note: Token rotation (blacklisting the old token) is handled by {@link
+   * io.github.sequelcore.vigil.auth.VigilAuthService} with grace period support.
    *
    * @param refreshToken the current refresh token
    * @param updatedClaims claims to update (merged with existing)
@@ -108,16 +114,13 @@ public class VigilTokenService {
    * @throws JwtException if refresh token is invalid or not a refresh token
    */
   public TokenRefreshResult refreshTokens(String refreshToken, Map<String, Object> updatedClaims) {
-    // Validate refresh token
     Claims claims = validateAndGetClaims(refreshToken);
 
-    // Verify it's a refresh token
     String type = claims.get("type", String.class);
     if (!"refresh".equals(type)) {
       throw new JwtException("Token is not a refresh token");
     }
 
-    // Build new claims
     Map<String, Object> newClaims = new HashMap<>();
     claims.forEach(
         (key, value) -> {
@@ -126,12 +129,10 @@ public class VigilTokenService {
           }
         });
 
-    // Merge updated claims
     if (updatedClaims != null) {
       newClaims.putAll(updatedClaims);
     }
 
-    // Remove refresh type for access token
     newClaims.remove("type");
 
     String subject = claims.getSubject();
@@ -139,7 +140,6 @@ public class VigilTokenService {
     Instant accessExp = now.plusMillis(jwtConfig.accessTtl().toMillis());
     Instant refreshExp = now.plusMillis(jwtConfig.refreshTtl().toMillis());
 
-    // Generate new tokens
     String newAccessToken =
         generateAccessToken(TokenRequest.builder().subject(subject).claims(newClaims).build());
 
@@ -160,14 +160,13 @@ public class VigilTokenService {
    * @throws JwtException if invalid
    */
   public Claims validateAndGetClaims(String token) {
-    JwtParserBuilder parserBuilder = Jwts.parser().verifyWith(signingKey);
+    JwtParserBuilder parserBuilder = Jwts.parser();
+    signer.configureParser(parserBuilder);
 
-    // RFC 8725bis: Validate issuer if configured
     if (jwtConfig.issuer() != null && !jwtConfig.issuer().isEmpty()) {
       parserBuilder.requireIssuer(jwtConfig.issuer());
     }
 
-    // RFC 8725bis: Validate audience if configured
     if (jwtConfig.audience() != null && !jwtConfig.audience().isEmpty()) {
       parserBuilder.requireAudience(jwtConfig.audience());
     }
@@ -222,7 +221,7 @@ public class VigilTokenService {
         Jwts.builder()
             .subject(request.subject())
             .issuedAt(Date.from(now))
-            .notBefore(Date.from(now)) // RFC 8725bis: prevent token usage before issued time
+            .notBefore(Date.from(now))
             .expiration(Date.from(expiration));
 
     if (jwtConfig.issuer() != null) {
@@ -239,7 +238,7 @@ public class VigilTokenService {
       }
     }
 
-    return builder.signWith(signingKey).compact();
+    return signer.sign(builder);
   }
 
   private boolean isReservedClaim(String key) {

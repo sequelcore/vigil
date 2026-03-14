@@ -20,15 +20,19 @@ Same pattern as Auth0/Okta starters.
 ## Install
 
 ```kotlin
-implementation("io.github.sequelcore:vigil-spring-boot-starter:4.1.0")
+implementation("io.github.sequelcore:vigil-spring-boot-starter:5.0.0")
 ```
 
 ## Configure
 
+### HS256 (default)
+
+Symmetric signing — any service with the secret can sign and verify.
+
 ```yaml
 vigil:
   jwt:
-    secret: ${JWT_SECRET}
+    secret: ${JWT_SECRET}       # Required: min 32 chars (256 bits per RFC 8725bis)
     access-ttl: 15m
     refresh-ttl: 7d
   cookie:
@@ -44,6 +48,36 @@ vigil:
       - /auth/**
       - /public/**
 ```
+
+### RS256
+
+Asymmetric signing — private key signs, public key verifies. Services can validate tokens without the ability to mint them.
+
+```yaml
+vigil:
+  jwt:
+    algorithm: RS256
+    rsa-private-key: ${RSA_PRIVATE_KEY}   # PEM string, file:/path, or classpath:path
+    rsa-public-key: ${RSA_PUBLIC_KEY}
+    issuer: my-app
+    audience: my-app
+    access-ttl: 15m
+    refresh-ttl: 7d
+```
+
+When `algorithm: RS256` is active:
+- A `/.well-known/jwks.json` endpoint is registered automatically
+- The endpoint is added to `ignored-paths` — no authentication required to access it
+- Every token includes a `kid` header (key fingerprint) for key rotation support
+
+Key generation:
+
+```bash
+openssl genrsa -out vigil-private.pem 2048
+openssl rsa -in vigil-private.pem -pubout -out vigil-public.pem
+```
+
+For Doppler/secrets managers, paste PEM content directly as environment variables.
 
 ## Usage
 
@@ -277,11 +311,17 @@ UUID tenantId = VigilTenantContext.requireTenant();
 ```yaml
 vigil:
   jwt:
-    secret: ${JWT_SECRET}       # Required (min 32 chars per RFC 8725bis)
+    # HS256 (default) — symmetric, shared secret
+    secret: ${JWT_SECRET}         # Required for HS256: min 32 chars (RFC 8725bis)
     access-ttl: 15m
     refresh-ttl: 7d
-    issuer: my-app              # Validated when configured (RFC 8725bis)
-    audience: my-app            # Validated when configured (RFC 8725bis)
+    issuer: my-app                # Optional: validated on parse when set (RFC 8725bis)
+    audience: my-app              # Optional: validated on parse when set (RFC 8725bis)
+
+    # RS256 (opt-in) — asymmetric, private signs / public verifies
+    algorithm: RS256              # HS256 (default) or RS256
+    rsa-private-key: ${RSA_PRIVATE_KEY}   # PEM: file:/path, classpath:path, or inline
+    rsa-public-key: ${RSA_PUBLIC_KEY}     # Required when algorithm=RS256
 
   auth:
     realm: my-app               # WWW-Authenticate realm (RFC 6750)
@@ -301,7 +341,7 @@ vigil:
   blacklist:
     max-size: 10000
     ttl: 24h
-    grace-period: 30s         # Reuse window for rotated tokens (0-60s)
+    grace-period: 30s           # Reuse window for rotated tokens (0-60s)
 
   protection:
     max-attempts: 5

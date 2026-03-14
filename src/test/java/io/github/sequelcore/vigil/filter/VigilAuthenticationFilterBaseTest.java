@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 import io.github.sequelcore.vigil.autoconfigure.VigilProperties;
 import io.github.sequelcore.vigil.blacklist.VigilBlacklistService;
 import io.github.sequelcore.vigil.core.cookie.VigilCookieService;
+import io.github.sequelcore.vigil.core.jwt.HmacTokenSigner;
 import io.github.sequelcore.vigil.core.jwt.VigilTokenService;
 import io.github.sequelcore.vigil.tenant.VigilTenantContext;
 import io.github.sequelcore.vigil.tenant.VigilTenantService;
@@ -46,14 +47,15 @@ abstract class VigilAuthenticationFilterBaseTest {
   void setUpBase() {
     MockitoAnnotations.openMocks(this);
     jwtConfig =
-        new VigilProperties.Jwt(SECRET, Duration.ofMinutes(15), Duration.ofDays(7), null, null);
+        new VigilProperties.Jwt(
+            SECRET, Duration.ofMinutes(15), Duration.ofDays(7), null, null, null, null, null);
     cookieConfig =
         new VigilProperties.Cookie(
             true,
             "Lax",
             true,
             Map.of("default", new VigilProperties.CookieProfile("access_token", "refresh_token")));
-    tokenService = new VigilTokenService(jwtConfig);
+    tokenService = new VigilTokenService(new HmacTokenSigner(jwtConfig.secret()), jwtConfig);
     cookieService = new VigilCookieService(cookieConfig, jwtConfig);
 
     // Default: tokens not blacklisted
@@ -69,12 +71,12 @@ abstract class VigilAuthenticationFilterBaseTest {
 
   protected String buildExpiredToken(String subject) {
     Instant now = Instant.now();
-    return Jwts.builder()
-        .subject(subject)
-        .issuedAt(java.util.Date.from(now.minusSeconds(120)))
-        .expiration(java.util.Date.from(now.minusSeconds(30)))
-        .signWith(tokenService.getSigningKey())
-        .compact();
+    return new HmacTokenSigner(jwtConfig.secret())
+        .sign(
+            Jwts.builder()
+                .subject(subject)
+                .issuedAt(java.util.Date.from(now.minusSeconds(120)))
+                .expiration(java.util.Date.from(now.minusSeconds(30))));
   }
 
   /** Testable filter subclass that captures callback invocations. */
