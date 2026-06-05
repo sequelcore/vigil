@@ -45,6 +45,8 @@ class VigilCookieServiceTest {
             null,
             null,
             null,
+            null,
+            null,
             null);
     cookieService = new VigilCookieService(cookieConfig, jwtConfig);
   }
@@ -197,6 +199,8 @@ class VigilCookieServiceTest {
             null,
             null,
             null,
+            null,
+            null,
             null);
     var multiService = new VigilCookieService(multiProfileConfig, jwtConfig);
 
@@ -248,6 +252,8 @@ class VigilCookieServiceTest {
             "01234567890123456789012345678901",
             Duration.ofMinutes(15),
             Duration.ofDays(7),
+            null,
+            null,
             null,
             null,
             null,

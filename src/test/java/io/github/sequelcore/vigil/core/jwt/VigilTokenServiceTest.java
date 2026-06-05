@@ -35,6 +35,8 @@ class VigilTokenServiceTest {
             "audience",
             null,
             null,
+            null,
+            null,
             null);
     blacklistService =
         new VigilBlacklistService(
@@ -334,6 +336,8 @@ class VigilTokenServiceTest {
               "01234567890123456789012345678901",
               Duration.ofMinutes(15),
               Duration.ofDays(7),
+              null,
+              null,
               null,
               null,
               null,

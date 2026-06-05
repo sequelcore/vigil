@@ -9,7 +9,11 @@ plugins {
 }
 
 group = "io.github.sequelcore"
-version = "5.0.1"
+version = "6.0.0"
+
+val hasSigningConfiguration = providers.gradleProperty("signingInMemoryKey").isPresent
+    || providers.gradleProperty("signing.secretKeyRingFile").isPresent
+    || providers.environmentVariable("ORG_GRADLE_PROJECT_signingInMemoryKey").isPresent
 
 java {
     toolchain {
@@ -121,7 +125,9 @@ tasks.register("qualityCheck") {
 // Maven Central Publishing via vanniktech plugin (v0.34.0+)
 mavenPublishing {
     publishToMavenCentral(automaticRelease = true)
-    signAllPublications()
+    if (hasSigningConfiguration) {
+        signAllPublications()
+    }
 
     coordinates(group.toString(), "vigil-spring-boot-starter", version.toString())
 

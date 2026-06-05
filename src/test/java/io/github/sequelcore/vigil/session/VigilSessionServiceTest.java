@@ -39,6 +39,8 @@ class VigilSessionServiceTest {
             null,
             null,
             null,
+            null,
+            null,
             null);
     VigilProperties.Cookie cookieConfig =
         new VigilProperties.Cookie(

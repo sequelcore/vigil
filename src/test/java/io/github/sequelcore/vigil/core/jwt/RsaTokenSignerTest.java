@@ -12,6 +12,7 @@ import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.time.Instant;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.Test;
 class RsaTokenSignerTest {
 
   private static RsaTokenSigner signer;
+  private static RSAPrivateKey privateKey;
   private static RSAPublicKey publicKey;
 
   @BeforeAll
@@ -27,8 +29,9 @@ class RsaTokenSignerTest {
     KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA");
     gen.initialize(2048);
     KeyPair pair = gen.generateKeyPair();
+    privateKey = (RSAPrivateKey) pair.getPrivate();
     publicKey = (RSAPublicKey) pair.getPublic();
-    signer = new RsaTokenSigner((RSAPrivateKey) pair.getPrivate(), publicKey);
+    signer = new RsaTokenSigner(privateKey, publicKey);
   }
 
   @Test
@@ -75,6 +78,33 @@ class RsaTokenSignerTest {
 
     assertThat(claims.getSubject()).isEqualTo("bob");
     assertThat(claims.get("role", String.class)).isEqualTo("admin");
+  }
+
+  @Test
+  @DisplayName("configureParser() validates tokens signed by an additional public key")
+  void parserValidatesTokenSignedByAdditionalPublicKey() throws Exception {
+    KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA");
+    gen.initialize(2048);
+    KeyPair previousPair = gen.generateKeyPair();
+    RsaTokenSigner previousSigner =
+        new RsaTokenSigner(
+            (RSAPrivateKey) previousPair.getPrivate(), (RSAPublicKey) previousPair.getPublic());
+    RsaTokenSigner rotatingSigner =
+        new RsaTokenSigner(privateKey, publicKey, List.of((RSAPublicKey) previousPair.getPublic()));
+
+    Instant now = Instant.now();
+    String oldToken =
+        previousSigner.sign(
+            Jwts.builder()
+                .subject("rotating-user")
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(now.plusSeconds(300))));
+
+    JwtParserBuilder parserBuilder = Jwts.parser();
+    rotatingSigner.configureParser(parserBuilder);
+    Claims claims = parserBuilder.build().parseSignedClaims(oldToken).getPayload();
+
+    assertThat(claims.getSubject()).isEqualTo("rotating-user");
   }
 
   @Test
@@ -138,5 +168,24 @@ class RsaTokenSignerTest {
     assertThat(jwk.get("kid")).isEqualTo(signer.getKid());
     assertThat((String) jwk.get("n")).isNotBlank();
     assertThat((String) jwk.get("e")).isNotBlank();
+  }
+
+  @Test
+  @DisplayName("getJwks() returns active and additional public keys")
+  void jwksContainAdditionalPublicKeys() throws Exception {
+    KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA");
+    gen.initialize(2048);
+    KeyPair activePair = gen.generateKeyPair();
+    KeyPair previousPair = gen.generateKeyPair();
+    RsaTokenSigner rotatingSigner =
+        new RsaTokenSigner(
+            (RSAPrivateKey) activePair.getPrivate(),
+            (RSAPublicKey) activePair.getPublic(),
+            List.of((RSAPublicKey) previousPair.getPublic()));
+
+    assertThat(rotatingSigner.getJwks()).hasSize(2);
+    assertThat(rotatingSigner.getJwks())
+        .extracting(jwk -> jwk.get("kid"))
+        .contains(rotatingSigner.getKid());
   }
 }

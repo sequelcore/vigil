@@ -8,7 +8,7 @@
 |-------|-------|
 | Group ID | io.github.sequelcore |
 | Artifact ID | vigil-spring-boot-starter |
-| Version | 5.0.0 |
+| Version | 6.0.0 |
 | Java | 21 |
 | Spring Boot | 3.5.x |
 
@@ -25,6 +25,7 @@ Vigil handles **token lifecycle**, not **user lifecycle**.
 - Multi-tenant context
 - Guest sessions
 - RS256 asymmetric signing + JWKS public key distribution
+- RS256 public-key rotation with verification-only previous keys
 
 **What Vigil does NOT do:**
 - User storage or lookup
@@ -49,7 +50,7 @@ This follows the same pattern as Auth0/Okta starters: validate tokens, delegate 
 io.github.sequelcore.vigil/
 ├── autoconfigure/           # Spring Boot auto-configuration + VigilProperties
 ├── auth/                    # VigilAuthService, VigilResetTokenService
-├── blacklist/               # Token blacklist (Caffeine)
+├── blacklist/               # Token blacklist (Caffeine default, custom shared backend SPI)
 ├── context/                 # VigilContextPopulator interface
 ├── core/
 │   ├── cookie/              # VigilCookieService
@@ -145,7 +146,7 @@ The app validates credentials, Vigil handles token orchestration.
 | `TokenSigner` | Strategy for JWT signing and parser configuration (HS256 / RS256) |
 | `VigilSessionProvider<T>` | Application implements for guest session lookup |
 | `VigilContextPopulator` | Application implements for custom security context |
-| `VigilBlacklistBackend` | Implement for Redis/DB blacklist storage |
+| `VigilBlacklistBackend` | Implement for Redis/DB blacklist storage; auto-detected as a bean |
 
 ## Configuration
 
@@ -169,10 +170,12 @@ vigil:
     algorithm: RS256
     rsa-private-key: ${RSA_PRIVATE_KEY}   # PEM: file:/path, classpath:path, or inline
     rsa-public-key: ${RSA_PUBLIC_KEY}
+    rsa-public-keys: []                   # Optional previous public keys for rotation
     issuer: your-app
     audience: your-audience
     access-ttl: 15m
     refresh-ttl: 7d
+    clock-skew: 0s                        # Optional, max 5m
 ```
 
 When `algorithm: RS256`:
@@ -189,10 +192,12 @@ vigil:
     algorithm: HS256                        # HS256 (default) or RS256
     rsa-private-key: ${RSA_PRIVATE_KEY}     # RS256 only
     rsa-public-key: ${RSA_PUBLIC_KEY}       # RS256 only
+    rsa-public-keys: []                     # RS256 verification-only previous keys
     access-ttl: 15m
     refresh-ttl: 7d
     issuer: your-app-name
     audience: your-audience
+    clock-skew: 0s
 
   auth:
     realm: your-app-name     # For WWW-Authenticate header (RFC 6750)
@@ -221,6 +226,9 @@ vigil:
     max-size: 10000          # Maximum cached entries
     ttl: 24h                 # Time-to-live for blacklisted tokens
     grace-period: 30s        # Grace period for token rotation (0-60s)
+
+  # Multi-instance deployments should expose a shared VigilBlacklistBackend bean.
+  # Without one, Vigil uses the in-memory Caffeine backend.
 
   tenant:
     enabled: false
@@ -252,7 +260,8 @@ During the grace period, reusing the old token returns the same cached new token
 
 ## Publishing
 
-Maven Central via GitHub Actions. Triggered by version tags.
+Maven Central via GitHub Actions. Publishing is manual and guarded by the
+release workflow.
 
 ```bash
 # 1. Update version in build.gradle.kts
@@ -264,4 +273,11 @@ git commit -m "chore: bump version to X.Y.Z"
 git push origin main
 git tag vX.Y.Z
 git push origin vX.Y.Z
+
+# 3. Run the Release workflow with:
+# operation=validate, release_ref=vX.Y.Z, release_version=X.Y.Z
+#
+# 4. Publish only after validation passes:
+# operation=publish, release_ref=vX.Y.Z, release_version=X.Y.Z,
+# confirmation="publish X.Y.Z"
 ```

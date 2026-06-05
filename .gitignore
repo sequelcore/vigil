@@ -25,6 +25,7 @@ Thumbs.db
 # Local configuration
 .env
 *.local
+.kiln/
 
 # Test output
 test-output/

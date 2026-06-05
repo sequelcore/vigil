@@ -51,6 +51,28 @@ class JwksControllerTest {
   }
 
   @Test
+  @DisplayName("Response body contains active and additional public keys")
+  void responseBodyContainsAdditionalKeys() throws Exception {
+    KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA");
+    gen.initialize(2048);
+    KeyPair activePair = gen.generateKeyPair();
+    KeyPair previousPair = gen.generateKeyPair();
+    RsaTokenSigner rotatingSigner =
+        new RsaTokenSigner(
+            (RSAPrivateKey) activePair.getPrivate(),
+            (RSAPublicKey) activePair.getPublic(),
+            List.of((RSAPublicKey) previousPair.getPublic()));
+    JwksController rotatingController = new JwksController(rotatingSigner);
+
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> keys =
+        (List<Map<String, Object>>) rotatingController.jwks().getBody().get("keys");
+
+    assertThat(keys).hasSize(2);
+    assertThat(keys).extracting(jwk -> jwk.get("kid")).contains(rotatingSigner.getKid());
+  }
+
+  @Test
   @DisplayName("JWK contains required RSA fields")
   void jwkContainsRequiredFields() {
     ResponseEntity<Map<String, Object>> response = controller.jwks();

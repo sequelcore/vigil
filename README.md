@@ -4,71 +4,153 @@ JWT authentication for Spring Boot. Security by default.
 
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.sequelcore/vigil-spring-boot-starter.svg)](https://central.sonatype.com/artifact/io.github.sequelcore/vigil-spring-boot-starter)
 
+Status: public hardening candidate. Version `6.0.0` is the current repository version. Vigil is used by Sequel applications, but public consumers should pin exact versions and review release notes before upgrades.
+
 ## Scope
 
-Vigil handles **token lifecycle**, not **user lifecycle**.
+Vigil handles token lifecycle, not user lifecycle.
 
-| Vigil does | Application does |
+| Vigil owns | Application owns |
 |------------|------------------|
-| Generate/validate/refresh tokens | Store/load users |
-| Manage HTTP-only cookies | Validate credentials |
-| Authenticate requests via filter | Define user model |
-| Blacklist tokens on logout | Implement login endpoint |
+| Access and refresh token generation | User storage and lookup |
+| JWT validation and refresh rotation | Credential validation |
+| HTTP-only cookie helpers | Login, registration, and account endpoints |
+| Bearer token and cookie extraction | User domain model and authorization rules |
+| Spring Security authentication filter | `SecurityFilterChain` route policy |
+| Token and subject blacklisting | Email, SMS, MFA, and recovery delivery |
+| Tenant context validation | Tenant ownership model |
+| Guest session token hooks | Guest/session persistence |
+| RS256 signing and JWKS endpoint | OAuth/OIDC authorization server duties |
 
-Same pattern as Auth0/Okta starters.
+Vigil is not an OAuth authorization server, OpenID Connect provider, user management system, or hosted identity product.
+
+## Documentation
+
+- [Usage guide](docs/usage-guide.md)
+- [Release policy](docs/release.md)
+- [Roadmap](docs/roadmap.md)
+- [Changelog](CHANGELOG.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security](SECURITY.md)
 
 ## Install
 
 ```kotlin
-implementation("io.github.sequelcore:vigil-spring-boot-starter:5.0.0")
+dependencies {
+    implementation("io.github.sequelcore:vigil-spring-boot-starter:6.0.0")
+}
 ```
+
+Vigil expects the application to provide Spring Web and Spring Security.
+
+## Spring Security Integration
+
+Vigil auto-configures a `VigilAuthenticationFilter` bean. The application must add it to its Spring Security filter chain and keep authorization rules in application code.
+
+```java
+@Configuration
+class SecurityConfig {
+
+    @Bean
+    SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            VigilAuthenticationFilter vigilAuthenticationFilter,
+            VigilAuthenticationEntryPoint vigilAuthenticationEntryPoint,
+            VigilProperties vigilProperties) throws Exception {
+
+        String[] ignoredPaths = vigilProperties.filter().ignoredPaths().toArray(String[]::new);
+        String[] publicPaths = vigilProperties.filter().publicPaths().toArray(String[]::new);
+
+        http.csrf(AbstractHttpConfigurer::disable)
+            .sessionManagement(session ->
+                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .exceptionHandling(exceptions ->
+                exceptions.authenticationEntryPoint(vigilAuthenticationEntryPoint))
+            .authorizeHttpRequests(auth -> {
+                if (ignoredPaths.length > 0) {
+                    auth.requestMatchers(ignoredPaths).permitAll();
+                }
+                if (publicPaths.length > 0) {
+                    auth.requestMatchers(publicPaths).permitAll();
+                }
+                auth.requestMatchers("/.well-known/jwks.json").permitAll()
+                    .anyRequest().authenticated();
+            })
+            .addFilterBefore(
+                vigilAuthenticationFilter,
+                UsernamePasswordAuthenticationFilter.class);
+
+        return http.build();
+    }
+}
+```
+
+Place the filter inside Spring Security's filter chain. Spring Security clears `SecurityContextHolder` when the security chain completes; adding Vigil as an unmanaged servlet filter is not the supported integration path.
+
+`ignored-paths` only means "skip Vigil"; it does not grant Spring Security access by itself. Permit health, actuator, JWKS, or other anonymous routes in `authorizeHttpRequests` when they should be reachable without authentication.
 
 ## Configure
 
-### HS256 (default)
+### HS256
 
-Symmetric signing — any service with the secret can sign and verify.
+Use HS256 only when every service that has the secret is trusted to sign tokens.
 
 ```yaml
 vigil:
   jwt:
-    secret: ${JWT_SECRET}       # Required: min 32 chars (256 bits per RFC 8725bis)
+    secret: ${JWT_SECRET}       # Required for HS256, min 32 characters
+    issuer: ${JWT_ISSUER}
+    audience: ${JWT_AUDIENCE}
     access-ttl: 15m
     refresh-ttl: 7d
+
+  auth:
+    realm: my-api
+
   cookie:
+    secure: true
+    http-only: true
+    same-site: Lax
     profiles:
       default:
         access-token-name: access_token
         refresh-token-name: refresh_token
+
   filter:
-    ignored-paths:       # Skip ALL processing (no tenant, no auth, no populators)
+    ignored-paths:
       - /actuator/**
       - /health
-    public-paths:        # Permit anonymous, authenticate if credentials present
+    public-paths:
       - /auth/**
       - /public/**
 ```
 
-### RS256
+### RS256 And JWKS
 
-Asymmetric signing — private key signs, public key verifies. Services can validate tokens without the ability to mint them.
+Use RS256 when one service signs tokens and other services only need to verify them.
 
 ```yaml
 vigil:
   jwt:
     algorithm: RS256
-    rsa-private-key: ${RSA_PRIVATE_KEY}   # PEM string, file:/path, or classpath:path
+    rsa-private-key: ${RSA_PRIVATE_KEY}
     rsa-public-key: ${RSA_PUBLIC_KEY}
-    issuer: my-app
-    audience: my-app
+    rsa-public-keys:
+      - ${PREVIOUS_RSA_PUBLIC_KEY}
+    issuer: my-auth-service
+    audience: my-api
     access-ttl: 15m
     refresh-ttl: 7d
+    clock-skew: 30s
 ```
 
 When `algorithm: RS256` is active:
-- A `/.well-known/jwks.json` endpoint is registered automatically
-- The endpoint is added to `ignored-paths` — no authentication required to access it
-- Every token includes a `kid` header (key fingerprint) for key rotation support
+
+- `/.well-known/jwks.json` is registered automatically.
+- The JWKS endpoint exposes the public key only.
+- Every signed token includes a deterministic `kid` header.
+- Additional `rsa-public-keys` are verification-only keys for rotation.
+- The HS256 `secret` property is ignored.
 
 Key generation:
 
@@ -77,157 +159,159 @@ openssl genrsa -out vigil-private.pem 2048
 openssl rsa -in vigil-private.pem -pubout -out vigil-public.pem
 ```
 
-For Doppler/secrets managers, paste PEM content directly as environment variables.
+`rsa-private-key` and `rsa-public-key` accept `file:/absolute/path.pem`, `classpath:path.pem`, or inline PEM content from a secrets manager.
+
+During RS256 rotation, deploy the new private/public key pair as `rsa-private-key` and `rsa-public-key`, and keep previous public keys in `rsa-public-keys` until all tokens signed by the previous private key have expired.
 
 ## Usage
 
-### Web Clients (SPAs)
+### Web Clients
 
-Tokens stored in HTTP-only cookies. Automatic CSRF protection via SameSite.
+Tokens are stored in HTTP-only cookies. Set `secure: true` in production and use HTTPS.
 
 ```java
 @RestController
 @RequiredArgsConstructor
-public class AuthController {
+class AuthController {
 
     private final VigilAuthService authService;
     private final VigilPasswordService passwordService;
     private final UserRepository userRepository;
 
     @PostMapping("/auth/login")
-    public AuthResult login(@RequestBody LoginRequest req, HttpServletResponse res) {
-        User user = userRepository.findByEmail(req.email())
-            .filter(u -> passwordService.matches(req.password(), u.getPasswordHash()))
+    AuthResult login(@RequestBody LoginRequest request, HttpServletResponse response) {
+        User user = userRepository.findByEmail(request.email())
+            .filter(candidate -> passwordService.matches(
+                request.password(),
+                candidate.passwordHash()))
             .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
 
-        return authService.login(res, user.getEmail(),
-            Map.of("userId", user.getId(), "roles", user.getRoles()));
+        return authService.login(
+            response,
+            user.email(),
+            Map.of("userId", user.id(), "roles", user.roles()));
     }
 
     @PostMapping("/auth/refresh")
-    public AuthResult refresh(HttpServletRequest req, HttpServletResponse res) {
-        return authService.refresh(req, res);
+    AuthResult refresh(HttpServletRequest request, HttpServletResponse response) {
+        return authService.refresh(request, response);
     }
 
     @PostMapping("/auth/logout")
-    public void logout(HttpServletRequest req, HttpServletResponse res) {
-        authService.logout(req, res);
+    void logout(HttpServletRequest request, HttpServletResponse response) {
+        authService.logout(request, response);
     }
 }
 ```
 
-### Native Apps & APIs (RFC 6749)
+### Native Apps And APIs
 
-Tokens returned in response body. Client stores in Keychain/Keystore.
+Tokens are returned in the response body. Native clients should store them in platform secure storage.
 
 ```java
-@RestController
-@RequiredArgsConstructor
-public class MobileAuthController {
+@PostMapping("/auth/login")
+AuthResult login(@RequestBody LoginRequest request) {
+    User user = validateCredentials(request);
+    return authService.login(user.email(), Map.of("userId", user.id(), "roles", user.roles()));
+}
 
-    private final VigilAuthService authService;
-    private final VigilPasswordService passwordService;
-    private final UserRepository userRepository;
+@PostMapping("/auth/refresh")
+AuthResult refresh(@RequestBody RefreshRequest request) {
+    return authService.refresh(request.refreshToken());
+}
 
-    @PostMapping("/auth/login")
-    public AuthResult login(@RequestBody LoginRequest req) {
-        User user = userRepository.findByEmail(req.email())
-            .filter(u -> passwordService.matches(req.password(), u.getPasswordHash()))
-            .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
-
-        return authService.login(user.getEmail(),
-            Map.of("userId", user.getId(), "roles", user.getRoles()));
-    }
-
-    @PostMapping("/auth/refresh")
-    public AuthResult refresh(@RequestBody RefreshRequest req) {
-        return authService.refresh(req.refreshToken());
-    }
-
-    @PostMapping("/auth/logout")
-    public void logout(@RequestBody LogoutRequest req) {
-        authService.logout(req.accessToken(), req.refreshToken());
-    }
+@PostMapping("/auth/logout")
+void logout(@RequestBody LogoutRequest request) {
+    authService.logout(request.accessToken(), request.refreshToken());
 }
 ```
 
 ## Filter Behavior
 
-The authentication filter separates **authentication** (who are you?) from **authorization** (can you access this?).
-
-| Path Type | Credentials | Behavior |
+| Path type | Credentials | Behavior |
 |-----------|-------------|----------|
-| Ignored | Any | Skip all processing, proceed |
-| Public | None | Permit anonymous |
-| Public | Valid | Authenticate user |
-| Public | Invalid | Permit anonymous (hook called) |
-| Protected | None | 401 Unauthorized |
-| Protected | Valid | Authenticate user |
-| Protected | Invalid | 401 Unauthorized |
+| Ignored | Any | Skip all Vigil processing |
+| Public | None | Continue anonymous |
+| Public | Valid | Authenticate and continue |
+| Public | Invalid | Continue anonymous after hook |
+| Protected | None | Leave unauthenticated for Spring Security 401 |
+| Protected | Valid | Authenticate and continue |
+| Protected | Invalid | Leave unauthenticated for Spring Security 401 |
 
-This allows public pages to optionally show user info when logged in (e.g., "Welcome, Alice").
+`ignored-paths` bypass tenant extraction, token parsing, session lookup, and context populators. `public-paths` still run Vigil so public endpoints can optionally see authenticated users.
 
-## Services
+## Token Lifecycle
 
-| Service | Purpose |
-|---------|---------|
-| `VigilAuthService` | Login, logout, refresh orchestration |
-| `VigilTokenService` | JWT generation, validation, refresh |
-| `VigilPasswordService` | BCrypt hashing, strength scoring |
-| `VigilCookieService` | HTTP-only cookie management |
-| `VigilBlacklistService` | Token and subject invalidation |
-| `VigilProtectionService` | Brute-force prevention |
-| `VigilResetTokenService` | Password reset tokens |
-| `VigilSessionService` | Guest session tokens |
-| `VigilTenantService` | Multi-tenant context |
-| `VigilAuthenticationEntryPoint` | RFC 6750 compliant 401 responses |
+Refresh rotation is enabled through `VigilAuthService`. When a refresh token is rotated, the old token is stored with a grace period so retrying the same refresh request can return the same new tokens during network races.
 
-## Multi-Portal Authentication
+```yaml
+vigil:
+  blacklist:
+    max-size: 10000
+    ttl: 24h
+    grace-period: 30s   # Clamped to max 60s
+```
 
-For apps with multiple user types (admin/customer):
+The default blacklist backend is in-memory Caffeine for single-instance deployments. In multi-instance deployments, expose a shared `VigilBlacklistBackend` bean backed by Redis, a database, or another shared store. Vigil auto-configuration wraps that backend with the configured rotation grace period.
+
+```java
+@Bean
+VigilBlacklistBackend sharedBlacklistBackend(MyRedisClient redis) {
+  return new MyRedisBlacklistBackend(redis);
+}
+```
+
+## Multi-Portal Cookies
 
 ```yaml
 vigil:
   cookie:
     profiles:
       staff:
-        access-token-name: staff_token
-        refresh-token-name: staff_refresh
+        access-token-name: staff_access_token
+        refresh-token-name: staff_refresh_token
       customer:
-        access-token-name: customer_token
-        refresh-token-name: customer_refresh
+        access-token-name: customer_access_token
+        refresh-token-name: customer_refresh_token
   filter:
     profile-paths:
       staff:
         - /api/console/**
       customer:
-        - /api/box/**
+        - /api/customer/**
 ```
 
 ```java
-// Staff login
-authService.login(response, user.getEmail(), "staff", claims);
-
-// Customer login
-authService.login(response, user.getEmail(), "customer", claims);
+authService.login(response, staff.email(), "staff", staffClaims);
+authService.login(response, customer.email(), "customer", customerClaims);
 ```
 
-Requests to `/api/console/**` use `staff_token`. Requests to `/api/box/**` use `customer_token`.
+## Multi-Tenant Requests
 
-## Custom Security Context
+```yaml
+vigil:
+  tenant:
+    enabled: true
+    header-name: X-Tenant-ID
+```
 
-Populate app-specific context after authentication:
+If a token has a `tenantId` claim and the request has `X-Tenant-ID`, Vigil rejects the authentication when they differ. If only the token has a tenant, Vigil uses the token tenant for the request context.
+
+```java
+UUID tenantId = VigilTenantContext.requireTenant();
+```
+
+## Custom Request Context
 
 ```java
 @Component
-public class UserContextPopulator implements VigilContextPopulator {
+class UserContextPopulator implements VigilContextPopulator {
 
     @Override
     public void populate(HttpServletRequest request, VigilTokenClaims claims) {
         UserContext.set(
-            claims.getString("userId").orElse(null),
-            claims.getStringList("roles")
-        );
+            claims == null ? null : claims.getString("userId").orElse(null),
+            claims == null ? List.of() : claims.getStringList("roles"));
     }
 
     @Override
@@ -237,73 +321,19 @@ public class UserContextPopulator implements VigilContextPopulator {
 }
 ```
 
-## Password Strength
+## Passwords And Reset Tokens
+
+Vigil provides BCrypt hashing, password strength feedback, and single-use reset tokens. The application still owns account lookup, new password validation policy, and email/SMS delivery.
 
 ```java
-PasswordStrength strength = passwordService.strength("weak123");
+PasswordStrength strength = passwordService.strength(newPassword);
 if (!strength.isAcceptable()) {
-    throw new ValidationException(strength.feedback());
+    throw new ValidationException(strength.feedback().toString());
 }
 
-String hash = passwordService.hash("StrongP@ss1!");
-boolean matches = passwordService.matches("StrongP@ss1!", hash);
-```
-
-## Password Reset
-
-```java
-// Generate token
-String token = resetTokenService.generate(user.getEmail());
-emailService.send(user.getEmail(), "Reset: " + url + "?token=" + token);
-
-// Validate and consume (single-use)
-String email = resetTokenService.validateAndConsume(token);
-user.setPasswordHash(passwordService.hash(newPassword));
-authService.invalidateAllSessions(email);
-```
-
-## Guest Sessions
-
-```yaml
-vigil:
-  session:
-    enabled: true
-    cookie-name: guest_session
-    ttl: 30m
-```
-
-```java
-@Component
-public class GuestSessionProvider implements VigilSessionProvider<Guest> {
-
-    @Override
-    public Optional<Guest> findByToken(String token, UUID tenantId) {
-        return guestRepository.findBySessionToken(token);
-    }
-
-    @Override
-    public boolean isExpired(Guest guest) {
-        return guest.isExpired();
-    }
-
-    @Override
-    public String getPrincipal(Guest guest) {
-        return guest.getId().toString();
-    }
-}
-```
-
-## Multi-Tenant
-
-```yaml
-vigil:
-  tenant:
-    enabled: true
-    header-name: X-Tenant-ID
-```
-
-```java
-UUID tenantId = VigilTenantContext.requireTenant();
+String token = resetTokenService.generate(user.email());
+String subject = resetTokenService.validateAndConsume(token);
+authService.invalidateAllSessions(subject);
 ```
 
 ## Configuration Reference
@@ -311,20 +341,19 @@ UUID tenantId = VigilTenantContext.requireTenant();
 ```yaml
 vigil:
   jwt:
-    # HS256 (default) — symmetric, shared secret
-    secret: ${JWT_SECRET}         # Required for HS256: min 32 chars (RFC 8725bis)
+    secret: ${JWT_SECRET}
+    algorithm: HS256
+    rsa-private-key: ${RSA_PRIVATE_KEY}
+    rsa-public-key: ${RSA_PUBLIC_KEY}
+    rsa-public-keys: []
     access-ttl: 15m
     refresh-ttl: 7d
-    issuer: my-app                # Optional: validated on parse when set (RFC 8725bis)
-    audience: my-app              # Optional: validated on parse when set (RFC 8725bis)
-
-    # RS256 (opt-in) — asymmetric, private signs / public verifies
-    algorithm: RS256              # HS256 (default) or RS256
-    rsa-private-key: ${RSA_PRIVATE_KEY}   # PEM: file:/path, classpath:path, or inline
-    rsa-public-key: ${RSA_PUBLIC_KEY}     # Required when algorithm=RS256
+    issuer: my-auth-service
+    audience: my-api
+    clock-skew: 0s
 
   auth:
-    realm: my-app               # WWW-Authenticate realm (RFC 6750)
+    realm: my-api
 
   cookie:
     secure: true
@@ -336,12 +365,12 @@ vigil:
         refresh-token-name: refresh_token
 
   password:
-    strength: 12                # BCrypt cost (4-31)
+    strength: 12
 
   blacklist:
     max-size: 10000
     ttl: 24h
-    grace-period: 30s           # Reuse window for rotated tokens (0-60s)
+    grace-period: 30s
 
   protection:
     max-attempts: 5
@@ -357,18 +386,25 @@ vigil:
     header-name: X-Tenant-ID
 
   filter:
-    ignored-paths: []           # Skip ALL processing
-    public-paths: []            # Permit anonymous, authenticate if present
-    profile-paths:
-      staff:
-        - /api/console/**
-      customer:
-        - /api/box/**
+    ignored-paths: []
+    public-paths: []
+    profile-paths: {}
 
   reset:
     ttl: 1h
 ```
 
+## Verify
+
+```bat
+gradlew.bat qualityCheck --no-daemon
+gradlew.bat build --no-daemon
+```
+
+## Release Policy
+
+Publishing is manual through the release workflow. A publish operation requires an exact `v<version>` ref, explicit `publish <version>` confirmation, scoped release secrets, and the protected `release` environment. Do not publish from local machines.
+
 ## License
 
-Apache 2.0
+Apache 2.0. See [LICENSE](LICENSE).

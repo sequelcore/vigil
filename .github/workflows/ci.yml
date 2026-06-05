@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
 
 permissions:
   contents: read
@@ -14,27 +13,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  java:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx2g
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: wrapper
 
-      - name: Build and test
-        run: ./gradlew build
+      - name: Quality gate
+        run: ./gradlew qualityCheck --no-daemon
+
+      - name: Build artifact
+        run: ./gradlew build --no-daemon
 
       - name: Upload test results
         if: always()
@@ -45,6 +49,7 @@ jobs:
             build/test-results/test/**
             build/reports/tests/test/**
           if-no-files-found: warn
+          retention-days: 14
 
       - name: Upload coverage report
         if: always()
@@ -53,3 +58,4 @@ jobs:
           name: coverage-report
           path: build/reports/jacoco/**
           if-no-files-found: warn
+          retention-days: 14

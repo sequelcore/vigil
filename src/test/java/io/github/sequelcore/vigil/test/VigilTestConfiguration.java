@@ -43,6 +43,8 @@ public class VigilTestConfiguration {
         null,
         null,
         null,
+        null,
+        null,
         null);
   }
 

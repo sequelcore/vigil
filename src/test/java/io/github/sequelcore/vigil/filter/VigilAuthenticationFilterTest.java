@@ -318,6 +318,23 @@ class VigilAuthenticationFilterTest extends VigilAuthenticationFilterBaseTest {
     }
 
     @Test
+    @DisplayName("Invalid token exposes sanitized error description")
+    void invalidTokenExposesSanitizedDescription() throws ServletException, IOException {
+      TestableFilter filter =
+          new TestableFilter(
+              tokenService, cookieService, blacklistService, null, new FilterConfig(List.of()));
+      when(request.getRequestURI()).thenReturn("/api/data");
+      when(request.getHeader("Authorization")).thenReturn("Bearer invalid.token.here");
+
+      filter.doFilterInternal(request, response, filterChain);
+
+      assertThat(filter.invalidTokenCalled).isTrue();
+      verify(request).setAttribute("vigil.error.code", "invalid_token");
+      verify(request).setAttribute("vigil.error.description", "Invalid access token");
+      assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+    }
+
+    @Test
     @DisplayName("Handle tenant mismatch")
     void handleTenantMismatch() throws ServletException, IOException {
       UUID headerTenant = UUID.randomUUID();

@@ -163,6 +163,10 @@ public class VigilTokenService {
     JwtParserBuilder parserBuilder = Jwts.parser();
     signer.configureParser(parserBuilder);
 
+    if (!jwtConfig.clockSkew().isZero()) {
+      parserBuilder.clockSkewSeconds(jwtConfig.clockSkew().toSeconds());
+    }
+
     if (jwtConfig.issuer() != null && !jwtConfig.issuer().isEmpty()) {
       parserBuilder.requireIssuer(jwtConfig.issuer());
     }

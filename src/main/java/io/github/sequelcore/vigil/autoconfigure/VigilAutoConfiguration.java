@@ -3,6 +3,7 @@ package io.github.sequelcore.vigil.autoconfigure;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.sequelcore.vigil.auth.VigilAuthService;
 import io.github.sequelcore.vigil.auth.VigilResetTokenService;
+import io.github.sequelcore.vigil.blacklist.VigilBlacklistBackend;
 import io.github.sequelcore.vigil.blacklist.VigilBlacklistService;
 import io.github.sequelcore.vigil.context.VigilContextPopulator;
 import io.github.sequelcore.vigil.core.cookie.VigilCookieService;
@@ -22,6 +23,7 @@ import io.github.sequelcore.vigil.session.VigilSessionService;
 import io.github.sequelcore.vigil.tenant.VigilTenantService;
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -68,7 +70,8 @@ public class VigilAutoConfiguration {
       case RS256 ->
           new RsaTokenSigner(
               PemKeyLoader.loadPrivateKey(jwt.rsaPrivateKey()),
-              PemKeyLoader.loadPublicKey(jwt.rsaPublicKey()));
+              PemKeyLoader.loadPublicKey(jwt.rsaPublicKey()),
+              jwt.rsaPublicKeys().stream().map(PemKeyLoader::loadPublicKey).toList());
     };
   }
 
@@ -76,11 +79,17 @@ public class VigilAutoConfiguration {
    * Creates the blacklist service for token invalidation.
    *
    * @param properties the loaded Vigil properties
+   * @param backend application-provided shared backend, if present
    * @return configured blacklist service
    */
   @Bean
   @ConditionalOnMissingBean
-  public VigilBlacklistService vigilBlacklistService(VigilProperties properties) {
+  public VigilBlacklistService vigilBlacklistService(
+      VigilProperties properties, ObjectProvider<VigilBlacklistBackend> backend) {
+    VigilBlacklistBackend customBackend = backend.getIfAvailable();
+    if (customBackend != null) {
+      return new VigilBlacklistService(customBackend, properties.blacklist().gracePeriod());
+    }
     return new VigilBlacklistService(properties.blacklist());
   }
 

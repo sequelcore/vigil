@@ -1,7 +1,6 @@
 package io.github.sequelcore.vigil.jwks;
 
 import io.github.sequelcore.vigil.core.jwt.RsaTokenSigner;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.springframework.http.CacheControl;
@@ -34,7 +33,7 @@ public class JwksController {
    * @param signer the RS256 signer whose public key is published
    */
   public JwksController(RsaTokenSigner signer) {
-    Map<String, Object> body = Map.of("keys", List.of(signer.getJwk()));
+    Map<String, Object> body = Map.of("keys", signer.getJwks());
     this.cachedResponse =
         ResponseEntity.ok()
             .cacheControl(CacheControl.maxAge(1, TimeUnit.HOURS).cachePublic())

@@ -365,7 +365,7 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
   protected void onInvalidToken(
       HttpServletRequest request, HttpServletResponse response, String token, JwtException e) {
     request.setAttribute("vigil.error.code", "invalid_token");
-    request.setAttribute("vigil.error.description", e.getMessage());
+    request.setAttribute("vigil.error.description", "Invalid access token");
   }
 
   /** Called when the token is blacklisted. */

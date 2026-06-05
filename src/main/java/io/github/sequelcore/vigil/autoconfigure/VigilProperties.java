@@ -96,7 +96,9 @@ public record VigilProperties(
    * @param algorithm signing algorithm; defaults to {@link Algorithm#HS256}
    * @param rsaPrivateKey PEM-encoded RSA private key — {@code file:/path}, {@code classpath:path},
    *     or inline PEM; required when {@code algorithm=RS256}
-   * @param rsaPublicKey PEM-encoded RSA public key; required when {@code algorithm=RS256}
+   * @param rsaPublicKey active PEM-encoded RSA public key; required when {@code algorithm=RS256}
+   * @param rsaPublicKeys additional verification-only RSA public keys for key rotation
+   * @param clockSkew allowed JWT validation clock skew, default zero, maximum five minutes
    */
   public record Jwt(
       String secret,
@@ -106,7 +108,9 @@ public record VigilProperties(
       String audience,
       Algorithm algorithm,
       String rsaPrivateKey,
-      String rsaPublicKey) {
+      String rsaPublicKey,
+      List<String> rsaPublicKeys,
+      Duration clockSkew) {
 
     /** JWT signing algorithm. */
     public enum Algorithm {
@@ -131,6 +135,8 @@ public record VigilProperties(
      * @param algorithm signing algorithm
      * @param rsaPrivateKey RSA private key PEM
      * @param rsaPublicKey RSA public key PEM
+     * @param rsaPublicKeys additional RSA public keys for verification during rotation
+     * @param clockSkew allowed validation clock skew
      */
     public Jwt {
       if (algorithm == null) {
@@ -141,6 +147,20 @@ public record VigilProperties(
       }
       if (refreshTtl == null) {
         refreshTtl = Duration.ofDays(7);
+      }
+      if (rsaPublicKeys == null) {
+        rsaPublicKeys = List.of();
+      } else {
+        rsaPublicKeys = List.copyOf(rsaPublicKeys);
+      }
+      if (clockSkew == null) {
+        clockSkew = Duration.ZERO;
+      }
+      if (clockSkew.isNegative()) {
+        throw new IllegalArgumentException("vigil.jwt.clock-skew cannot be negative");
+      }
+      if (clockSkew.compareTo(Duration.ofMinutes(5)) > 0) {
+        throw new IllegalArgumentException("vigil.jwt.clock-skew cannot exceed 5 minutes");
       }
 
       if (algorithm == Algorithm.HS256) {

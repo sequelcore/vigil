@@ -1,82 +1,163 @@
-name: Publish
+name: Release
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
+    inputs:
+      operation:
+        description: "Run validation only, or publish to Maven Central."
+        required: true
+        default: "validate"
+        type: choice
+        options:
+          - validate
+          - publish
+      release_ref:
+        description: "Branch or tag to check out. Publishing requires v<release_version>."
+        required: true
+        default: "main"
+      release_version:
+        description: "Vigil release version."
+        required: true
+        default: "6.0.0"
+      doppler_project:
+        description: "Doppler project containing release secrets."
+        required: true
+        default: "sequel-releases"
+      doppler_config:
+        description: "Doppler config containing release secrets."
+        required: true
+        default: "prd"
+      confirmation:
+        description: "Required for publish: publish <release_version>"
+        required: false
+        default: ""
 
 permissions:
   contents: read
 
 concurrency:
-  group: publish-${{ github.ref }}
-  cancel-in-progress: true
+  group: release-${{ inputs.operation }}-${{ inputs.release_ref }}
+  cancel-in-progress: false
 
 jobs:
   validate:
+    name: Validate release candidate
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      validated_sha: ${{ steps.capture-sha.outputs.sha }}
+    env:
+      RELEASE_VERSION: ${{ inputs.release_version }}
+      OPERATION: ${{ inputs.operation }}
+      RELEASE_REF: ${{ inputs.release_ref }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - name: Checkout release ref
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.release_ref }}
+          fetch-depth: 0
+
+      - name: Capture validated commit
+        id: capture-sha
+        shell: bash
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: wrapper
+
+      - name: Validate release inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$OPERATION" != "validate" && "$OPERATION" != "publish" ]]; then
+            echo "Unsupported operation: $OPERATION"
+            exit 1
+          fi
+
+          if [[ "$OPERATION" == "validate" ]]; then
+            exit 0
+          fi
+
+          expected_ref="v${RELEASE_VERSION}"
+          expected_confirmation="publish ${RELEASE_VERSION}"
+
+          if [[ "$RELEASE_REF" != "$expected_ref" ]]; then
+            echo "Publishing requires release_ref=$expected_ref."
+            exit 1
+          fi
+
+          if [[ "$CONFIRMATION" != "$expected_confirmation" ]]; then
+            echo "Publishing requires confirmation='$expected_confirmation'."
+            exit 1
+          fi
+
+      - name: Validate version alignment
+        shell: bash
+        run: grep -F "version = \"$RELEASE_VERSION\"" build.gradle.kts
+
+      - name: Quality gate
+        run: ./gradlew qualityCheck --no-daemon
+
+      - name: Build
+        run: ./gradlew build --no-daemon
+
+      - name: Maven local publish dry run
+        run: ./gradlew publishToMavenLocal --no-daemon --no-configuration-cache
+
+  publish:
+    name: Publish Maven Central artifact
+    needs: validate
+    if: ${{ inputs.operation == 'publish' }}
+    runs-on: ubuntu-latest
+    environment: release
     permissions:
       contents: read
     env:
       GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx2g
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout release ref
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.validate.outputs.validated_sha }}
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: wrapper
 
-      - name: Validate tag format
-        run: |
-          if [[ ! "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-.+)?$ ]]; then
-            echo "Tag ${GITHUB_REF_NAME} is not a semantic version (v*.*.*)"
-            exit 1
-          fi
-
-      - name: Build
-        run: ./gradlew build
-
-  publish:
-    needs: validate
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    env:
-      GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx2g
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 21
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: wrapper
-
-      - name: Install Doppler CLI
-        uses: dopplerhq/cli-action@v3
-
-      - name: Fetch secrets from Doppler
-        uses: dopplerhq/secrets-fetch-action@v1.3.0
+      - name: Fetch release secrets
+        uses: dopplerhq/secrets-fetch-action@v2.0.0
         with:
           doppler-token: ${{ secrets.DOPPLER_TOKEN }}
-          doppler-project: sequel-core
-          doppler-config: prd
+          doppler-project: ${{ inputs.doppler_project }}
+          doppler-config: ${{ inputs.doppler_config }}
           inject-env-vars: true
+
+      - name: Verify Maven publish secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${MAVEN_USERNAME:-}"
+          test -n "${MAVEN_PASSWORD:-}"
+          test -n "${GPG_PRIVATE_KEY:-}"
+          test -n "${GPG_PASSPHRASE:-}"
 
       - name: Publish to Maven Central
         run: ./gradlew publishAllPublicationsToMavenCentralRepository --no-configuration-cache
@@ -85,8 +166,3 @@ jobs:
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ env.MAVEN_PASSWORD }}
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ env.GPG_PRIVATE_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ env.GPG_PASSPHRASE }}
-
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@v1
-        with:
-          generate_release_notes: true

@@ -48,7 +48,16 @@ abstract class VigilAuthenticationFilterBaseTest {
     MockitoAnnotations.openMocks(this);
     jwtConfig =
         new VigilProperties.Jwt(
-            SECRET, Duration.ofMinutes(15), Duration.ofDays(7), null, null, null, null, null);
+            SECRET,
+            Duration.ofMinutes(15),
+            Duration.ofDays(7),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null);
     cookieConfig =
         new VigilProperties.Cookie(
             true,

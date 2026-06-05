@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.sequelcore.vigil.autoconfigure.VigilProperties;
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.IncorrectClaimException;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
@@ -16,7 +17,30 @@ class VigilTokenServiceRfc8725Test {
 
   private static VigilProperties.Jwt jwt(String secret, String issuer, String audience) {
     return new VigilProperties.Jwt(
-        secret, Duration.ofMinutes(15), Duration.ofDays(7), issuer, audience, null, null, null);
+        secret,
+        Duration.ofMinutes(15),
+        Duration.ofDays(7),
+        issuer,
+        audience,
+        null,
+        null,
+        null,
+        null,
+        null);
+  }
+
+  private static VigilProperties.Jwt jwtWithClockSkew(Duration clockSkew) {
+    return new VigilProperties.Jwt(
+        SECRET_32,
+        Duration.ofMinutes(15),
+        Duration.ofDays(7),
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        clockSkew);
   }
 
   private static VigilTokenService service(VigilProperties.Jwt config) {
@@ -113,5 +137,34 @@ class VigilTokenServiceRfc8725Test {
     if (claims.getAudience() != null) {
       assertThat(claims.getAudience()).isEmpty();
     }
+  }
+
+  @Test
+  void shouldRejectRecentlyExpiredTokenWithoutClockSkew() {
+    var svc = service(jwtWithClockSkew(Duration.ZERO));
+    String token =
+        svc.generateAccessToken(
+            TokenRequest.builder()
+                .subject("user@test.com")
+                .accessTtl(Duration.ofSeconds(-10))
+                .build());
+
+    assertThatThrownBy(() -> svc.validateAndGetClaims(token))
+        .isInstanceOf(ExpiredJwtException.class);
+  }
+
+  @Test
+  void shouldAcceptRecentlyExpiredTokenWithinConfiguredClockSkew() {
+    var svc = service(jwtWithClockSkew(Duration.ofSeconds(30)));
+    String token =
+        svc.generateAccessToken(
+            TokenRequest.builder()
+                .subject("user@test.com")
+                .accessTtl(Duration.ofSeconds(-10))
+                .build());
+
+    Claims claims = svc.validateAndGetClaims(token);
+
+    assertThat(claims.getSubject()).isEqualTo("user@test.com");
   }
 }
