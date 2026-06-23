@@ -47,7 +47,7 @@ dependencies {
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
 
     // Cache (for token blacklist)
-    implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
+    implementation("com.github.ben-manes.caffeine:caffeine:3.2.4")
 
     // Validation
     implementation("jakarta.validation:jakarta.validation-api")
