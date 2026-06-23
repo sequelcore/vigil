@@ -2,7 +2,6 @@ package io.github.sequelcore.vigil.entrypoint;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.PrintWriter;
@@ -12,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.core.AuthenticationException;
+import tools.jackson.databind.ObjectMapper;
 
 /** Tests for {@link VigilAuthenticationEntryPoint} - RFC 6750 compliance. */
 class VigilAuthenticationEntryPointTest {

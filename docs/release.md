@@ -1,7 +1,8 @@
 # Release Policy
 
 Vigil is published as a Spring Boot starter for JWT authentication. Version
-`6.0.0` is the current repository version and release hardening baseline.
+`7.0.0` is the current repository version and Spring Boot 4.1 certification
+baseline.
 
 Vigil is used by Sequel applications, but public consumers should pin exact
 versions, read release notes, and review migration notes before upgrades.
@@ -34,11 +35,24 @@ between releases when tests and public behavior remain stable.
 
 Current tested compatibility envelope:
 
-- Java 21;
-- Spring Boot 3.5.x;
-- Spring Security 6.5.x through Spring Boot 3.5.x;
+- Java 25;
+- Spring Boot 4.1.x;
+- Spring Framework 7.x through Spring Boot 4.1.x;
+- Spring Security 7.1.x through Spring Boot 4.1.x;
+- Jackson 3 through `tools.jackson` packages;
+- Gradle 9.1.x wrapper;
 - HS256 with a configured 256-bit minimum secret;
 - RS256 with configured PEM private/public keys and JWKS publication.
+
+Vigil `6.0.x` is the Spring Boot 3.5.x / Java 21 line. Spring Boot 4.1
+consumers must use a `7.0.x` or newer artifact because Boot 4 changes the
+default JSON stack to Jackson 3 and modularizes several Boot support packages.
+
+The `7.0.0` line intentionally changes
+`VigilAuthenticationEntryPoint(String, ObjectMapper)` from Jackson 2
+`com.fasterxml.jackson.databind.ObjectMapper` to Jackson 3
+`tools.jackson.databind.ObjectMapper`. This is a public constructor type change
+and therefore requires a major release.
 
 Untested compatibility must not be described as supported in release notes,
 README, Maven metadata, or examples.
@@ -64,8 +78,8 @@ Before a public release:
 4. Public API or configuration changes have migration notes.
 5. Architecture changes are documented in the relevant public guide or roadmap.
 6. Security changes are covered by focused tests.
-7. `gradlew.bat qualityCheck --no-daemon` passes locally.
-8. `gradlew.bat build --no-daemon` passes locally.
+7. `gradlew.bat clean check --no-daemon` passes locally.
+8. `gradlew.bat qualityCheck --no-daemon` passes locally.
 9. Maven local publication evidence exists.
 10. Release automation uses scoped permissions, manual dispatch, protected
     environment gates, explicit confirmation, and runtime secret fetch before
@@ -77,19 +91,14 @@ Before a public release:
 Quality gate:
 
 ```bash
+gradlew.bat clean check --no-daemon
 gradlew.bat qualityCheck --no-daemon
-```
-
-Build:
-
-```bash
-gradlew.bat build --no-daemon
 ```
 
 Maven local publication:
 
 ```bash
-gradlew.bat publishToMavenLocal --no-daemon --no-configuration-cache
+gradlew.bat publishToMavenLocal --no-daemon
 ```
 
 ## Publication Policy

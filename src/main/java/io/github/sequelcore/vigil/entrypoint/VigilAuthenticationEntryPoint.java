@@ -1,6 +1,5 @@
 package io.github.sequelcore.vigil.entrypoint;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -11,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.lang.Nullable;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.AuthenticationEntryPoint;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * RFC 6750 compliant authentication entry point for bearer token errors.

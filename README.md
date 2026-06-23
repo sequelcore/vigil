@@ -4,7 +4,29 @@ JWT authentication for Spring Boot. Security by default.
 
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.sequelcore/vigil-spring-boot-starter.svg)](https://central.sonatype.com/artifact/io.github.sequelcore/vigil-spring-boot-starter)
 
-Status: public hardening candidate. Version `6.0.0` is the current repository version. Vigil is used by Sequel applications, but public consumers should pin exact versions and review release notes before upgrades.
+Status: Spring Boot 4.1 certification candidate. Version `7.0.0` is the current repository version. Vigil is used by Sequel applications, but public consumers should pin exact versions and review release notes before upgrades.
+
+## Compatibility
+
+Vigil `7.0.0` is the Spring Boot 4.1.x / Java 25 certification line.
+
+| Component | Supported line |
+|-----------|----------------|
+| Java | 25 |
+| Spring Boot | 4.1.x |
+| Spring Framework | 7.x through Spring Boot |
+| Spring Security | 7.1.x through Spring Boot |
+| Gradle wrapper | 9.1.x |
+| JSON support | Jackson 3 (`tools.jackson`) |
+
+Vigil `6.0.x` remains the Spring Boot 3.5.x / Java 21 line. Spring Boot 4.1
+consumers should use `7.0.0` or newer because Boot 4 moves to Jackson 3 and
+modular test/client support.
+
+The only intentional public API break in `7.0.0` is the JSON mapper type used
+by `VigilAuthenticationEntryPoint`: Spring Boot 4 defaults to Jackson 3, so the
+constructor now accepts `tools.jackson.databind.ObjectMapper` instead of
+Jackson 2's `com.fasterxml.jackson.databind.ObjectMapper`.
 
 ## Scope
 
@@ -37,7 +59,7 @@ Vigil is not an OAuth authorization server, OpenID Connect provider, user manage
 
 ```kotlin
 dependencies {
-    implementation("io.github.sequelcore:vigil-spring-boot-starter:6.0.0")
+    implementation("io.github.sequelcore:vigil-spring-boot-starter:7.0.0")
 }
 ```
 
@@ -397,8 +419,9 @@ vigil:
 ## Verify
 
 ```bat
+gradlew.bat clean check --no-daemon
 gradlew.bat qualityCheck --no-daemon
-gradlew.bat build --no-daemon
+gradlew.bat publishToMavenLocal --no-daemon
 ```
 
 ## Release Policy

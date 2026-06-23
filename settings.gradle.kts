@@ -1,8 +1,12 @@
-rootProject.name = "vigil-spring-boot-starter"
-
 pluginManagement {
     repositories {
         mavenCentral()
         gradlePluginPortal()
     }
 }
+
+plugins {
+    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
+}
+
+rootProject.name = "vigil-spring-boot-starter"
