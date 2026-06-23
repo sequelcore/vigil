@@ -2,7 +2,7 @@ plugins {
     id("java-library")
     id("org.springframework.boot") version "4.1.0" apply false
     id("io.spring.dependency-management") version "1.1.7"
-    id("com.diffplug.spotless") version "7.0.2"
+    id("com.diffplug.spotless") version "8.7.0"
     id("checkstyle")
     id("jacoco")
     id("com.vanniktech.maven.publish") version "0.34.0"
