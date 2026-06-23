@@ -1,6 +1,5 @@
 package io.github.sequelcore.vigil.autoconfigure;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.sequelcore.vigil.auth.VigilAuthService;
 import io.github.sequelcore.vigil.auth.VigilResetTokenService;
 import io.github.sequelcore.vigil.blacklist.VigilBlacklistBackend;
@@ -31,6 +30,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.lang.Nullable;
 import org.springframework.security.web.AuthenticationEntryPoint;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Auto-configuration for the Vigil authentication starter.

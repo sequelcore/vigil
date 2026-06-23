@@ -7,7 +7,19 @@ include migration notes.
 
 ## Unreleased
 
-- No unreleased changes.
+- Certified Vigil for Spring Boot 4.1.x, Spring Framework 7.x, Spring Security
+  7.1.x, Java 25, Gradle 9.1.x, and Jackson 3.
+- Updated build tooling to Spring Boot 4.1.0, Java 25 toolchains, Gradle 9.1.0,
+  JaCoCo 0.8.14, Checkstyle 13.6.0, and google-java-format 1.28.0.
+- Added starter auto-configuration compatibility tests that prove Vigil core
+  beans load without product-owned user lifecycle beans.
+- Migrated Vigil's JSON entry point constructor from Jackson 2
+  `com.fasterxml.jackson.databind.ObjectMapper` to Jackson 3
+  `tools.jackson.databind.ObjectMapper`.
+- Updated integration tests for Spring Boot 4's `spring-boot-resttestclient`
+  package and explicit test client auto-configuration.
+- Recommended a new `7.0.0` release for Spring Boot 4.1 consumers. Use
+  `6.0.x` for Spring Boot 3.5 / Java 21 applications.
 
 ## 6.0.0 - 2026-06-05
 

@@ -1,6 +1,6 @@
 plugins {
     id("java-library")
-    id("org.springframework.boot") version "3.5.0" apply false
+    id("org.springframework.boot") version "4.1.0" apply false
     id("io.spring.dependency-management") version "1.1.7"
     id("com.diffplug.spotless") version "7.0.2"
     id("checkstyle")
@@ -9,7 +9,7 @@ plugins {
 }
 
 group = "io.github.sequelcore"
-version = "6.0.0"
+version = "7.0.0"
 
 val hasSigningConfiguration = providers.gradleProperty("signingInMemoryKey").isPresent
     || providers.gradleProperty("signing.secretKeyRingFile").isPresent
@@ -17,7 +17,7 @@ val hasSigningConfiguration = providers.gradleProperty("signingInMemoryKey").isP
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(25)
     }
 }
 
@@ -27,7 +27,7 @@ repositories {
 
 dependencyManagement {
     imports {
-        mavenBom("org.springframework.boot:spring-boot-dependencies:3.5.0")
+        mavenBom("org.springframework.boot:spring-boot-dependencies:4.1.0")
     }
 }
 
@@ -38,6 +38,7 @@ dependencies {
 
     // Auto-configuration
     implementation("org.springframework.boot:spring-boot-autoconfigure")
+    implementation("org.springframework.boot:spring-boot-jackson")
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
 
     // JWT - api scope exposes Claims, JwtException to consumers
@@ -60,6 +61,8 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-security")
     testImplementation("org.springframework.boot:spring-boot-starter-validation")
     testImplementation("org.springframework.security:spring-security-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-restclient")
+    testImplementation("org.springframework.boot:spring-boot-resttestclient")
     testImplementation("org.springframework.boot:spring-boot-starter-web")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testCompileOnly("org.projectlombok:lombok")
@@ -69,7 +72,7 @@ dependencies {
 // Spotless configuration (Google Java Format)
 spotless {
     java {
-        googleJavaFormat("1.25.2")
+        googleJavaFormat("1.28.0")
         removeUnusedImports()
         trimTrailingWhitespace()
         endWithNewline()
@@ -78,14 +81,14 @@ spotless {
 
 // Checkstyle configuration
 checkstyle {
-    toolVersion = "10.21.4"
+    toolVersion = "13.6.0"
     configFile = file("${rootDir}/config/checkstyle/checkstyle.xml")
     isIgnoreFailures = false
 }
 
 // JaCoCo configuration
 jacoco {
-    toolVersion = "0.8.12"
+    toolVersion = "0.8.14"
 }
 
 tasks.jacocoTestReport {

@@ -9,6 +9,16 @@ Vigil does not own user storage, credential validation, registration flows,
 authorization policy, OAuth authorization-server endpoints, OIDC provider
 behavior, email delivery, SMS delivery, or MFA orchestration.
 
+## Supported Platform
+
+Vigil `7.0.x` supports Spring Boot 4.1.x, Spring Framework 7.x, Spring Security
+7.1.x, Java 25, Gradle 9.1.x, and Jackson 3. Consumers still own their
+`SecurityFilterChain` and product authentication endpoints.
+
+Use Vigil `6.0.x` for Spring Boot 3.5.x / Java 21 applications. Do not mix the
+Boot 3.5 line with Vigil `7.0.x` because Spring Boot 4 moves JSON support to
+Jackson 3 `tools.jackson` packages.
+
 ## Choosing The Client Path
 
 Use cookie-based flows for browser clients that can rely on HTTP-only cookies:
@@ -236,6 +246,7 @@ Test authentication at the adapter boundary:
 Run the project gate before release:
 
 ```bash
+gradlew.bat clean check --no-daemon
 gradlew.bat qualityCheck --no-daemon
-gradlew.bat build --no-daemon
+gradlew.bat publishToMavenLocal --no-daemon
 ```

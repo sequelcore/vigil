@@ -8,7 +8,7 @@ current supported scope and future candidates.
 
 ## Current Scope
 
-- Java 21 and Spring Boot 3.5.x.
+- Java 25 and Spring Boot 4.1.x.
 - HS256 JWT signing with minimum 256-bit secret validation.
 - RS256 JWT signing with JWKS publication.
 - RS256 public-key rotation through verification-only previous keys.
