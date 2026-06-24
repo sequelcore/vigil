@@ -44,9 +44,11 @@ Current tested compatibility envelope:
 - HS256 with a configured 256-bit minimum secret;
 - RS256 with configured PEM private/public keys and JWKS publication.
 
-Vigil `6.0.x` is the Spring Boot 3.5.x / Java 21 line. Spring Boot 4.1
-consumers must use a `7.0.x` or newer artifact because Boot 4 changes the
-default JSON stack to Jackson 3 and modularizes several Boot support packages.
+Vigil `7.0.x` is the active supported platform line. Vigil `6.0.x` was the
+final Spring Boot 3.5.x / Java 21 line and is not supported for Spring Boot
+4.1 consumers. Do not add compatibility shims between the two lines; Boot 4
+changes the default JSON stack to Jackson 3 and modularizes several Boot
+support packages.
 
 The `7.0.0` line intentionally changes
 `VigilAuthenticationEntryPoint(String, ObjectMapper)` from Jackson 2

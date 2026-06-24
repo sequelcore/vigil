@@ -18,8 +18,9 @@ include migration notes.
   `tools.jackson.databind.ObjectMapper`.
 - Updated integration tests for Spring Boot 4's `spring-boot-resttestclient`
   package and explicit test client auto-configuration.
-- Recommended a new `7.0.0` release for Spring Boot 4.1 consumers. Use
-  `6.0.x` for Spring Boot 3.5 / Java 21 applications.
+- Recommended a new `7.0.0` release for Spring Boot 4.1 consumers. Vigil
+  `6.0.x` was the final Spring Boot 3.5 / Java 21 line, not a
+  backward-compatibility target for `7.0.x`.
 
 ## 6.0.0 - 2026-06-05
 

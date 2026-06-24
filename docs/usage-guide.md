@@ -15,9 +15,10 @@ Vigil `7.0.x` supports Spring Boot 4.1.x, Spring Framework 7.x, Spring Security
 7.1.x, Java 25, Gradle 9.1.x, and Jackson 3. Consumers still own their
 `SecurityFilterChain` and product authentication endpoints.
 
-Use Vigil `6.0.x` for Spring Boot 3.5.x / Java 21 applications. Do not mix the
-Boot 3.5 line with Vigil `7.0.x` because Spring Boot 4 moves JSON support to
-Jackson 3 `tools.jackson` packages.
+Vigil `6.0.x` was the final Spring Boot 3.5.x / Java 21 line. Do not mix the
+Boot 3.5 line with Vigil `7.0.x`, and do not add compatibility shims between
+the two platform lines. Spring Boot 4 moves JSON support to Jackson 3
+`tools.jackson` packages.
 
 ## Choosing The Client Path
 

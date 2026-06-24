@@ -19,9 +19,10 @@ Vigil `7.0.0` is the Spring Boot 4.1.x / Java 25 certification line.
 | Gradle wrapper | 9.1.x |
 | JSON support | Jackson 3 (`tools.jackson`) |
 
-Vigil `6.0.x` remains the Spring Boot 3.5.x / Java 21 line. Spring Boot 4.1
-consumers should use `7.0.0` or newer because Boot 4 moves to Jackson 3 and
-modular test/client support.
+Vigil `7.0.x` is the active supported platform line. Vigil `6.0.x` was the
+final Spring Boot 3.5.x / Java 21 line and is not supported for Spring Boot
+4.1 consumers. Do not add compatibility shims between the two lines; Boot 4
+moves to Jackson 3 and modular test/client support.
 
 The only intentional public API break in `7.0.0` is the JSON mapper type used
 by `VigilAuthenticationEntryPoint`: Spring Boot 4 defaults to Jackson 3, so the
