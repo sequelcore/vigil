@@ -21,7 +21,7 @@ jobs:
       GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx2g
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Setup Java
         uses: actions/setup-java@v5
