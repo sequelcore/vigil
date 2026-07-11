@@ -30,6 +30,8 @@ Vigil must:
 - keep cookie defaults production-safe (`HttpOnly`, `Secure`, and explicit `SameSite`);
 - keep user lifecycle and authorization decisions in the application;
 - use an application-provided shared `VigilBlacklistBackend` bean for multi-instance revocation;
+- consume step-up proofs atomically and bind them to tenant, audience, purpose, and TTL;
+- never log PINs, PIN hashes, or step-up proof values;
 - keep JWKS public-key exposure separate from private signing keys.
 
 ## Disclosure

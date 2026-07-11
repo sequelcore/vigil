@@ -137,6 +137,7 @@ class VigilAutoConfigurationTest {
         null,
         null,
         null,
+        null,
         null);
   }
 

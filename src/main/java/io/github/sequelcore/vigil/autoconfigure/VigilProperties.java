@@ -33,7 +33,8 @@ public record VigilProperties(
     Filter filter,
     Session session,
     Reset reset,
-    Auth auth) {
+    Auth auth,
+    StepUp stepUp) {
 
   /**
    * Applies defaults when configuration sections are omitted.
@@ -81,6 +82,9 @@ public record VigilProperties(
     }
     if (auth == null) {
       auth = new Auth(null);
+    }
+    if (stepUp == null) {
+      stepUp = new StepUp(Duration.ofMinutes(2), Duration.ofMinutes(5), 10000, null);
     }
   }
 
@@ -445,6 +449,40 @@ public record VigilProperties(
     public Auth {
       if (realm == null || realm.isEmpty()) {
         realm = "app";
+      }
+    }
+  }
+
+  /** Step-up authorization configuration. */
+  public record StepUp(Duration challengeTtl, Duration proofTtl, int maxSize, Pin pin) {
+    public StepUp {
+      if (challengeTtl == null || challengeTtl.isNegative() || challengeTtl.isZero()) {
+        challengeTtl = Duration.ofMinutes(2);
+      }
+      if (proofTtl == null || proofTtl.isNegative() || proofTtl.isZero()) {
+        proofTtl = Duration.ofMinutes(5);
+      }
+      if (maxSize <= 0) {
+        maxSize = 10000;
+      }
+      if (pin == null) {
+        pin = new Pin(6, 12, 12, true);
+      }
+    }
+
+    /** Numeric PIN policy. */
+    public record Pin(
+        int minLength, int maxLength, int bcryptStrength, boolean rejectCommonPatterns) {
+      public Pin {
+        if (minLength < 4) {
+          minLength = 6;
+        }
+        if (maxLength < minLength || maxLength > 128) {
+          maxLength = 12;
+        }
+        if (bcryptStrength < 4 || bcryptStrength > 31) {
+          bcryptStrength = 12;
+        }
       }
     }
   }

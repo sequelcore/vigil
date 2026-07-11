@@ -19,6 +19,11 @@ import io.github.sequelcore.vigil.jwks.JwksController;
 import io.github.sequelcore.vigil.protection.VigilProtectionService;
 import io.github.sequelcore.vigil.session.VigilSessionProvider;
 import io.github.sequelcore.vigil.session.VigilSessionService;
+import io.github.sequelcore.vigil.stepup.CaffeineStepUpStore;
+import io.github.sequelcore.vigil.stepup.StepUpAuthorizationService;
+import io.github.sequelcore.vigil.stepup.StepUpCredentialVerifier;
+import io.github.sequelcore.vigil.stepup.StepUpStore;
+import io.github.sequelcore.vigil.stepup.pin.VigilPinService;
 import io.github.sequelcore.vigil.tenant.VigilTenantService;
 import java.util.ArrayList;
 import java.util.List;
@@ -155,6 +160,34 @@ public class VigilAutoConfiguration {
   @ConditionalOnMissingBean
   public VigilProtectionService vigilProtectionService(VigilProperties properties) {
     return new VigilProtectionService(properties.protection());
+  }
+
+  /** Creates the default single-node store for step-up challenges and proofs. */
+  @Bean
+  @ConditionalOnMissingBean
+  public StepUpStore stepUpStore(VigilProperties properties) {
+    VigilProperties.StepUp config = properties.stepUp();
+    return new CaffeineStepUpStore(config.maxSize(), config.challengeTtl().plus(config.proofTtl()));
+  }
+
+  /** Creates the PIN policy and BCrypt hashing service. */
+  @Bean
+  @ConditionalOnMissingBean
+  public VigilPinService vigilPinService(VigilProperties properties) {
+    return new VigilPinService(properties.stepUp().pin());
+  }
+
+  /**
+   * Creates the generic step-up authorization service. Credential verifiers are application SPIs.
+   */
+  @Bean
+  @ConditionalOnMissingBean
+  public StepUpAuthorizationService stepUpAuthorizationService(
+      VigilProperties properties,
+      StepUpStore store,
+      VigilProtectionService protectionService,
+      List<StepUpCredentialVerifier> verifiers) {
+    return new StepUpAuthorizationService(properties.stepUp(), store, protectionService, verifiers);
   }
 
   /**

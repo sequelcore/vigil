@@ -7,6 +7,18 @@ include migration notes.
 
 ## Unreleased
 
+- Added generic step-up authorization: short-lived, opaque, one-time proofs bound to tenant,
+  audience, purpose, current actor, authorizing actor, method, and audit ID without mutating the
+  current session.
+- Added extensible credential verifier and shared-state SPIs, plus personal numeric PIN support
+  with BCrypt hashing, configurable policy, rotation/revocation helpers, lockout reuse, and
+  single-node Caffeine defaults.
+- Added step-up integration, security, migration, and multi-instance deployment documentation.
+- Reorganized the public documentation around a canonical index, architecture, API contracts,
+  security, operations, development verification, and release guidance.
+- Consolidated duplicated integration and configuration prose into a concise package README, a
+  task-focused authentication guide, and one configuration reference.
+
 - Certified Vigil for Spring Boot 4.1.x, Spring Framework 7.x, Spring Security
   7.1.x, Java 25, Gradle 9.1.x, and Jackson 3.
 - Updated build tooling to Spring Boot 4.1.0, Java 25 toolchains, Gradle 9.1.0,
