@@ -2,7 +2,7 @@ plugins {
     id("java-library")
     id("org.springframework.boot") version "4.1.0" apply false
     id("io.spring.dependency-management") version "1.1.7"
-    id("com.diffplug.spotless") version "7.0.2"
+    id("com.diffplug.spotless") version "8.8.0"
     id("checkstyle")
     id("jacoco")
     id("com.vanniktech.maven.publish") version "0.34.0"
@@ -42,12 +42,12 @@ dependencies {
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
 
     // JWT - api scope exposes Claims, JwtException to consumers
-    api("io.jsonwebtoken:jjwt-api:0.12.6")
-    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
-    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
+    api("io.jsonwebtoken:jjwt-api:0.13.0")
+    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.13.0")
+    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.13.0")
 
     // Cache (for token blacklist)
-    implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
+    implementation("com.github.ben-manes.caffeine:caffeine:3.2.4")
 
     // Validation
     implementation("jakarta.validation:jakarta.validation-api")

@@ -7,6 +7,10 @@ include migration notes.
 
 ## Unreleased
 
+- Updated the Gradle wrapper to 9.6.1, Spotless to 8.8.0, Caffeine to 3.2.4,
+  and JJWT to 0.13.0.
+- Updated CI and release actions to current action majors and aligned CI with Java 25.
+
 - Certified Vigil for Spring Boot 4.1.x, Spring Framework 7.x, Spring Security
   7.1.x, Java 25, Gradle 9.1.x, and Jackson 3.
 - Updated build tooling to Spring Boot 4.1.0, Java 25 toolchains, Gradle 9.1.0,
