@@ -39,7 +39,7 @@ Current tested compatibility envelope:
 - Spring Framework 7.x through Spring Boot 4.1.x;
 - Spring Security 7.1.x through Spring Boot 4.1.x;
 - Jackson 3 through `tools.jackson` packages;
-- Gradle 9.1.x wrapper;
+- Gradle 9.6.x wrapper;
 - HS256 with a configured 256-bit minimum secret;
 - RS256 with configured PEM private/public keys and JWKS publication.
 
