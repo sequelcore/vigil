@@ -27,5 +27,9 @@ Thumbs.db
 *.local
 .kiln/
 
+# Kiln-generated native harness projections
+.claude/
+AGENTS.md
+
 # Test output
 test-output/
