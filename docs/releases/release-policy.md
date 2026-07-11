@@ -1,7 +1,7 @@
 # Release Policy
 
 Vigil is published as a Spring Boot starter for JWT authentication. Version
-`7.1.0` is the current release line and Spring Boot 4.1 certification baseline.
+`7.1.1` is the current release line and Spring Boot 4.1 certification baseline.
 
 Vigil is used by Sequel applications, but public consumers should pin exact
 versions, read release notes, and review migration notes before upgrades.

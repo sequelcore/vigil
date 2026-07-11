@@ -10,7 +10,7 @@ Vigil provides JWT lifecycle, request authentication, cookie helpers, tenant con
 
 Vigil `7.1.x` supports Java 25, Spring Boot 4.1.x, Spring Framework 7.x, Spring Security 7.1.x, Gradle 9.6.x, and Jackson 3. Vigil `6.0.x` was the final Java 21 / Spring Boot 3.5 line.
 
-`7.1.0` is the current release line. Public consumers should pin an exact version and review the release notes before upgrading.
+`7.1.1` is the current release line. Public consumers should pin an exact version and review the release notes before upgrading.
 
 ## Install
 
