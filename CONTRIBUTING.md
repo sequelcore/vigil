@@ -4,8 +4,8 @@ Contributions are welcome when they keep Vigil small, explicit, tested, and secu
 
 ## Development Requirements
 
-- Java 21.
-- Spring Boot 3.5.x compatibility.
+- Java 25.
+- Spring Boot 4.1.x compatibility.
 - Use the Gradle wrapper, not a system Gradle requirement.
 
 ## Quality Gates

@@ -22,6 +22,7 @@ current supported scope and future candidates.
 - Tenant context validation.
 - Guest session hooks.
 - BCrypt password helpers and single-use reset tokens.
+- Step-up authorization with generic credential verifiers, one-time proofs, and personal PIN support.
 
 Vigil does not claim OAuth authorization-server support, OIDC provider support,
 hosted identity management, user storage, credential validation ownership, MFA
@@ -44,6 +45,8 @@ need tests and docs when they change architecture or public contracts.
 Every completed roadmap slice must update:
 
 - `CHANGELOG.md` for user-visible changes;
-- `docs/usage-guide.md` when behavior or configuration changes;
-- `docs/release.md` when release policy changes;
+- `docs/guides/authentication.md` when the application integration path changes;
+- `docs/reference/configuration.md` when a `vigil.*` property or default changes;
+- `docs/security/step-up-authorization.md` when the step-up boundary changes;
+- `docs/releases/release-policy.md` when release policy changes;
 - the relevant public guide when the architecture boundary changes.

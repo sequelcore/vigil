@@ -22,6 +22,20 @@ include migration notes.
   `6.0.x` was the final Spring Boot 3.5 / Java 21 line, not a
   backward-compatibility target for `7.0.x`.
 
+## 7.1.0 - 2026-07-10
+
+- Added generic step-up authorization: short-lived, opaque, one-time proofs bound to tenant,
+  audience, purpose, current actor, authorizing actor, method, and audit ID without mutating the
+  current session.
+- Added extensible credential verifier and shared-state SPIs, plus personal numeric PIN support
+  with BCrypt hashing, configurable policy, rotation/revocation helpers, lockout reuse, and
+  single-node Caffeine defaults.
+- Added step-up integration, security, migration, and multi-instance deployment documentation.
+- Reorganized the public documentation around a canonical index, architecture, API contracts,
+  security, operations, development verification, and release guidance.
+- Consolidated duplicated integration and configuration prose into a concise package README, a
+  task-focused authentication guide, and one configuration reference.
+
 ## 6.0.0 - 2026-06-05
 
 - Hardened public release documentation with security, contribution, usage,
