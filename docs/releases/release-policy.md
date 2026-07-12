@@ -1,7 +1,7 @@
 # Release Policy
 
 Vigil is published as a Spring Boot starter for JWT authentication. Version
-`7.1.1` is the current release line and Spring Boot 4.1 certification baseline.
+`7.2.0` is the current release line and Spring Boot 4.1 certification baseline.
 
 Vigil is used by Sequel applications, but public consumers should pin exact
 versions, read release notes, and review migration notes before upgrades.
@@ -43,7 +43,7 @@ Current tested compatibility envelope:
 - HS256 with a configured 256-bit minimum secret;
 - RS256 with configured PEM private/public keys and JWKS publication.
 
-Vigil `7.1.x` is the active supported platform line. Vigil `6.0.x` was the
+Vigil `7.2.x` is the active supported platform line. Vigil `6.0.x` was the
 final Spring Boot 3.5.x / Java 21 line and is not supported for Spring Boot
 4.1 consumers. Do not add compatibility shims between the two lines; Boot 4
 changes the default JSON stack to Jackson 3 and modularizes several Boot

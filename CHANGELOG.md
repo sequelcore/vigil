@@ -7,6 +7,8 @@ include migration notes.
 
 ## Unreleased
 
+## 7.2.0 - 2026-07-12
+
 - Added stateless Spring MVC async and streaming support based on a request-attribute
   `SecurityContextRepository`, preserving identity across legitimate redispatches without
   revalidating JWTs or creating an `HttpSession`.
