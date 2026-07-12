@@ -43,7 +43,6 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.lang.Nullable;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -223,8 +222,7 @@ class VigilSseDisconnectTomcatIntegrationTest {
       RequestAttributeSecurityContextRepository repository =
           new RequestAttributeSecurityContextRepository();
       authenticationFilter.setSecurityContextRepository(repository);
-      http.csrf(AbstractHttpConfigurer::disable)
-          .sessionManagement(
+      http.sessionManagement(
               session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
           .securityContext(context -> context.securityContextRepository(repository))
           .authorizeHttpRequests(authorize -> authorize.anyRequest().authenticated())
