@@ -7,6 +7,12 @@ include migration notes.
 
 ## Unreleased
 
+- Added stateless Spring MVC async and streaming support based on a request-attribute
+  `SecurityContextRepository`, preserving identity across legitimate redispatches without
+  revalidating JWTs or creating an `HttpSession`.
+- Added integration coverage and migration guidance for Spring MVC async return types and
+  dispatcher authorization.
+
 ## 7.1.1 - 2026-07-10
 
 - Updated the Gradle wrapper to 9.6.1, Spotless to 8.8.0, Caffeine to 3.2.4,

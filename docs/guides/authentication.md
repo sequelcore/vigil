@@ -23,8 +23,13 @@ Vigil auto-configures `VigilAuthenticationFilter`. Add it inside the application
 ```java
 @Bean
 SecurityFilterChain securityFilterChain(
-    HttpSecurity http, VigilAuthenticationFilter vigilAuthenticationFilter) throws Exception {
+    HttpSecurity http,
+    VigilAuthenticationFilter vigilAuthenticationFilter) throws Exception {
+  var requestSecurityContextRepository = new RequestAttributeSecurityContextRepository();
+  vigilAuthenticationFilter.setSecurityContextRepository(requestSecurityContextRepository);
   return http
+      .securityContext(context ->
+          context.securityContextRepository(requestSecurityContextRepository))
       .authorizeHttpRequests(authorize -> authorize
           .requestMatchers("/auth/**").permitAll()
           .anyRequest().authenticated())
@@ -32,6 +37,10 @@ SecurityFilterChain securityFilterChain(
       .build();
 }
 ```
+
+The request-scoped repository is required for MVC async and streaming return types. See
+[async and streaming security](async-streaming-security.md) for the stateless lifecycle and
+dispatcher authorization model.
 
 `ignored-paths` bypasses Vigil entirely. `public-paths` permits an anonymous request while making a valid existing authentication available to the application. Neither setting replaces `authorizeHttpRequests`.
 
