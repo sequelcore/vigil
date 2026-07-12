@@ -10,6 +10,8 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.context.RequestAttributeSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextRepository;
 
 @SpringBootApplication
 public class TestApplication {
@@ -22,13 +24,19 @@ public class TestApplication {
   SecurityFilterChain securityFilterChain(
       HttpSecurity http, VigilAuthenticationFilter authenticationFilter, VigilProperties properties)
       throws Exception {
+    SecurityContextRepository securityContextRepository =
+        new RequestAttributeSecurityContextRepository();
+    authenticationFilter.setSecurityContextRepository(securityContextRepository);
     http.csrf(AbstractHttpConfigurer::disable)
         .sessionManagement(
             session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+        .securityContext(context -> context.securityContextRepository(securityContextRepository))
         .authorizeHttpRequests(
             auth ->
                 auth.requestMatchers(properties.filter().publicPaths().toArray(String[]::new))
                     .permitAll()
+                    .requestMatchers("/protected/admin/**")
+                    .hasRole("ADMIN")
                     .anyRequest()
                     .authenticated())
         .addFilterBefore(authenticationFilter, UsernamePasswordAuthenticationFilter.class);

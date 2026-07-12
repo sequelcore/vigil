@@ -4,6 +4,8 @@ Vigil is a Spring Boot starter for application-owned JWT authentication. It prov
 
 ## Start here
 
+- [Async and streaming security](guides/async-streaming-security.md) — preserve stateless authentication across MVC redispatches.
+
 - [Authentication guide](guides/authentication.md) — configure JWTs, cookies, Spring Security, tenants, and reset tokens.
 - [Configuration reference](reference/configuration.md) — every `vigil.*` property and its defaults.
 - [System boundaries](architecture/system-boundaries.md) — understand ownership and extension points before integrating.

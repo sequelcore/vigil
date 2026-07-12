@@ -8,7 +8,10 @@ Vigil provides JWT lifecycle, request authentication, cookie helpers, tenant con
 
 ## Compatibility
 
-Vigil `7.1.x` supports Java 25, Spring Boot 4.1.x, Spring Framework 7.x, Spring Security 7.1.x, Gradle 9.6.x, and Jackson 3. Vigil `6.0.x` was the final Java 21 / Spring Boot 3.5 line.
+Vigil `7.1.x` is certified with Java 25, Spring Boot 4.1.0, Spring Framework 7.0.8,
+Spring Security 7.1.0, Gradle 9.6.x, and Jackson 3. Later dependency patches are not claimed as
+certified until they pass Vigil's complete gate. Vigil `6.0.x` was the final Java 21 / Spring Boot
+3.5 line.
 
 `7.1.1` is the current release line. Public consumers should pin an exact version and review the release notes before upgrading.
 
@@ -16,7 +19,7 @@ Vigil `7.1.x` supports Java 25, Spring Boot 4.1.x, Spring Framework 7.x, Spring 
 
 ```kotlin
 dependencies {
-    implementation("io.github.sequelcore:vigil-spring-boot-starter:7.0.0")
+    implementation("io.github.sequelcore:vigil-spring-boot-starter:7.1.1")
 }
 ```
 
@@ -43,6 +46,7 @@ The application must still configure route authorization. `ignored-paths` skips 
 Start at the [documentation index](docs/README.md).
 
 - [Authentication guide](docs/guides/authentication.md)
+- [Async and streaming security](docs/guides/async-streaming-security.md)
 - [Configuration reference](docs/reference/configuration.md)
 - [System boundaries](docs/architecture/system-boundaries.md)
 - [Security model](docs/security/security-model.md)

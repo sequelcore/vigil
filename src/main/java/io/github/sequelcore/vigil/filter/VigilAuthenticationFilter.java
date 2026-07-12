@@ -19,13 +19,17 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.lang.Nullable;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.context.SecurityContextHolderStrategy;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.security.web.context.RequestAttributeSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
@@ -65,6 +69,10 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
   private final PathMatcher ignoredPathMatcher;
   private final PathMatcher publicPathMatcher;
   private final ProfilePathMatcher profilePathMatcher;
+  private SecurityContextRepository securityContextRepository =
+      new RequestAttributeSecurityContextRepository();
+  private final SecurityContextHolderStrategy securityContextHolderStrategy =
+      SecurityContextHolder.getContextHolderStrategy();
 
   /** Creates a new authentication filter with all dependencies. */
   public VigilAuthenticationFilter(
@@ -89,6 +97,11 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
     this.ignoredPathMatcher = new PathMatcher(filterConfig.ignoredPaths());
     this.publicPathMatcher = new PathMatcher(filterConfig.publicPaths());
     this.profilePathMatcher = new ProfilePathMatcher(filterConfig.profilePaths());
+  }
+
+  /** Sets the repository used to preserve authentication within the same servlet request. */
+  public void setSecurityContextRepository(SecurityContextRepository securityContextRepository) {
+    this.securityContextRepository = Objects.requireNonNull(securityContextRepository);
   }
 
   @Override
@@ -207,7 +220,7 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
     UsernamePasswordAuthenticationToken authentication =
         new UsernamePasswordAuthenticationToken(claims.getSubject(), null, authorities);
     authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-    SecurityContextHolder.getContext().setAuthentication(authentication);
+    saveAuthentication(request, response, authentication);
 
     // Notify subclasses of successful authentication
     onAuthenticationSuccess(request, response, claims);
@@ -255,7 +268,7 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
     UsernamePasswordAuthenticationToken authentication =
         new UsernamePasswordAuthenticationToken(principal, null, authorities);
     authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-    SecurityContextHolder.getContext().setAuthentication(authentication);
+    saveAuthentication(request, response, authentication);
 
     // Let application populate its context
     provider.onAuthenticated(session, request);
@@ -264,6 +277,16 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
     onSessionAuthenticated(request, response, session);
 
     return true;
+  }
+
+  private void saveAuthentication(
+      HttpServletRequest request,
+      HttpServletResponse response,
+      UsernamePasswordAuthenticationToken authentication) {
+    var context = securityContextHolderStrategy.createEmptyContext();
+    context.setAuthentication(authentication);
+    securityContextHolderStrategy.setContext(context);
+    securityContextRepository.saveContext(context, request, response);
   }
 
   private boolean handleTenantContext(

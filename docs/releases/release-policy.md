@@ -35,15 +35,15 @@ between releases when tests and public behavior remain stable.
 Current tested compatibility envelope:
 
 - Java 25;
-- Spring Boot 4.1.x;
-- Spring Framework 7.x through Spring Boot 4.1.x;
-- Spring Security 7.1.x through Spring Boot 4.1.x;
+- Spring Boot 4.1.0;
+- Spring Framework 7.0.8 through the Spring Boot 4.1.0 BOM;
+- Spring Security 7.1.0 through the Spring Boot 4.1.0 BOM;
 - Jackson 3 through `tools.jackson` packages;
 - Gradle 9.6.x wrapper;
 - HS256 with a configured 256-bit minimum secret;
 - RS256 with configured PEM private/public keys and JWKS publication.
 
-Vigil `7.0.x` is the active supported platform line. Vigil `6.0.x` was the
+Vigil `7.1.x` is the active supported platform line. Vigil `6.0.x` was the
 final Spring Boot 3.5.x / Java 21 line and is not supported for Spring Boot
 4.1 consumers. Do not add compatibility shims between the two lines; Boot 4
 changes the default JSON stack to Jackson 3 and modularizes several Boot
