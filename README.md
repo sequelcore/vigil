@@ -8,18 +8,18 @@ Vigil provides JWT lifecycle, request authentication, cookie helpers, tenant con
 
 ## Compatibility
 
-Vigil `7.1.x` is certified with Java 25, Spring Boot 4.1.0, Spring Framework 7.0.8,
+Vigil `7.2.x` is certified with Java 25, Spring Boot 4.1.0, Spring Framework 7.0.8,
 Spring Security 7.1.0, Gradle 9.6.x, and Jackson 3. Later dependency patches are not claimed as
 certified until they pass Vigil's complete gate. Vigil `6.0.x` was the final Java 21 / Spring Boot
 3.5 line.
 
-`7.1.1` is the current release line. Public consumers should pin an exact version and review the release notes before upgrading.
+`7.2.0` is the current release line. Public consumers should pin an exact version and review the release notes before upgrading.
 
 ## Install
 
 ```kotlin
 dependencies {
-    implementation("io.github.sequelcore:vigil-spring-boot-starter:7.1.1")
+    implementation("io.github.sequelcore:vigil-spring-boot-starter:7.2.0")
 }
 ```
 
