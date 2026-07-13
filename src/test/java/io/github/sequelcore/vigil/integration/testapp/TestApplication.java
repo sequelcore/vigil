@@ -6,12 +6,12 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.context.RequestAttributeSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 
 @SpringBootApplication
 public class TestApplication {
@@ -27,7 +27,7 @@ public class TestApplication {
     SecurityContextRepository securityContextRepository =
         new RequestAttributeSecurityContextRepository();
     authenticationFilter.setSecurityContextRepository(securityContextRepository);
-    http.csrf(AbstractHttpConfigurer::disable)
+    http.csrf(csrf -> csrf.csrfTokenRepository(new CookieCsrfTokenRepository()))
         .sessionManagement(
             session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .securityContext(context -> context.securityContextRepository(securityContextRepository))

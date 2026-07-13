@@ -1,8 +1,10 @@
 package io.github.sequelcore.vigil.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -118,6 +120,13 @@ class VigilAsyncSecurityIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(content().string("false"));
     mvc.perform(get("/protected/session-state")).andExpect(status().isForbidden());
+  }
+
+  @Test
+  void stateChangingBrowserRequestWithoutCsrfTokenIsRejected() throws Exception {
+    mvc.perform(post("/auth/login")).andExpect(status().isForbidden());
+    mvc.perform(post("/auth/login").with(csrf().useInvalidToken()))
+        .andExpect(status().isForbidden());
   }
 
   @Test

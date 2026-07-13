@@ -106,8 +106,21 @@ class VigilIntegrationTest {
 
   @Test
   void loginEndpointSetsHttpOnlySecureCookies() {
+    ResponseEntity<String> csrf = restTemplate.getForEntity(url("/csrf"), String.class);
+    assertThat(csrf.getHeaders().get(HttpHeaders.SET_COOKIE))
+        .noneMatch(header -> header.startsWith("JSESSIONID="));
+    String csrfCookie =
+        csrf.getHeaders().get(HttpHeaders.SET_COOKIE).stream()
+            .filter(header -> header.startsWith("XSRF-TOKEN="))
+            .findFirst()
+            .orElseThrow()
+            .split(";", 2)[0];
+    HttpHeaders headers = new HttpHeaders();
+    headers.add(HttpHeaders.COOKIE, csrfCookie);
+    headers.add("X-XSRF-TOKEN", csrf.getBody());
+
     ResponseEntity<Void> response =
-        restTemplate.postForEntity(url("/auth/login"), HttpEntity.EMPTY, Void.class);
+        restTemplate.postForEntity(url("/auth/login"), new HttpEntity<>(headers), Void.class);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     List<String> setCookie = response.getHeaders().get(HttpHeaders.SET_COOKIE);
@@ -117,6 +130,7 @@ class VigilIntegrationTest {
     assertThat(setCookie).allMatch(header -> header.contains("HttpOnly"));
     assertThat(setCookie).allMatch(header -> header.contains("Secure"));
     assertThat(setCookie).allMatch(header -> header.contains("SameSite=Lax"));
+    assertThat(setCookie).noneMatch(header -> header.startsWith("JSESSIONID="));
   }
 
   @Test
