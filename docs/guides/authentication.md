@@ -28,6 +28,8 @@ SecurityFilterChain securityFilterChain(
   var requestSecurityContextRepository = new RequestAttributeSecurityContextRepository();
   vigilAuthenticationFilter.setSecurityContextRepository(requestSecurityContextRepository);
   return http
+      .sessionManagement(session ->
+          session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
       .securityContext(context ->
           context.securityContextRepository(requestSecurityContextRepository))
       .authorizeHttpRequests(authorize -> authorize
@@ -38,11 +40,14 @@ SecurityFilterChain securityFilterChain(
 }
 ```
 
-The request-scoped repository is required for MVC async and streaming return types. See
+The example is stateless: the repository is request-scoped and does not create an `HttpSession`.
+It is required for MVC async and streaming return types. See
 [async and streaming security](async-streaming-security.md) for the stateless lifecycle and
 dispatcher authorization model.
 
-`ignored-paths` bypasses Vigil entirely. `public-paths` permits an anonymous request while making a valid existing authentication available to the application. Neither setting replaces `authorizeHttpRequests`.
+`ignored-paths` bypasses Vigil processing. `public-paths` lets Vigil continue without a credential
+while still authenticating one when present. Neither setting grants access: the application must
+configure matching `permitAll` rules when anonymous access is intended.
 
 ## 3. Issue tokens after application credential validation
 

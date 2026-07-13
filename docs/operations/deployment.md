@@ -19,10 +19,13 @@ The built-in Caffeine implementations are single-node defaults.
 | Feature | Production cluster requirement |
 | --- | --- |
 | blacklist and refresh rotation | provide a shared `VigilBlacklistBackend` |
+| password reset | provide a shared blacklist backend and serialize concurrent completion for the same reset token |
 | step-up authorization | provide a shared `StepUpStore` with atomic challenge/proof consumption |
 | failed-attempt protection | place a shared rate limiter or equivalent protection in front of the application when node-local lockout is insufficient |
 
-Do not use eventually consistent state for one-time proof consumption. A proof must be consumed at most once across all nodes.
+Do not use eventually consistent state for one-time step-up proof consumption. A proof must be
+consumed at most once across all nodes. Reset-token validation and invalidation are separate
+operations; the application must prevent concurrent password resets with the same token.
 
 ## Operational checks
 

@@ -8,7 +8,7 @@ This guide names Vigil's public integration contracts. It is not generated Javad
 | --- | --- |
 | `VigilAuthService` | Validate application credentials before issuing, refreshing, or revoking tokens. |
 | `VigilTokenService` | Use only when a lower-level token integration is genuinely needed. |
-| `VigilResetTokenService` | Deliver the reset token and update the user's password after successful consumption. |
+| `VigilResetTokenService` | Deliver the token, serialize concurrent completion in application/shared storage, and update the password only after successful consumption. See the [security model](../security/security-model.md). |
 | `VigilPasswordService` | Store its returned hash; own password policy and user persistence. |
 | `VigilTenantContext` | Read the validated request tenant. |
 

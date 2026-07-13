@@ -19,7 +19,7 @@ import java.util.UUID;
  * <ul>
  *   <li>Cryptographically signed (tamper-proof)
  *   <li>Time-limited (configurable TTL)
- *   <li>Single-use (automatically blacklisted after consumption)
+ *   <li>Invalidated after successful validation; callers must serialize concurrent completion
  * </ul>
  *
  * <p>Example password reset flow:
@@ -69,7 +69,7 @@ public class VigilResetTokenService {
    * Creates a reset token service with the provided dependencies.
    *
    * @param tokenService the token service for JWT operations
-   * @param blacklistService the blacklist service for single-use enforcement
+   * @param blacklistService the blacklist service for post-validation invalidation
    * @param config reset token configuration
    */
   public VigilResetTokenService(
@@ -99,7 +99,7 @@ public class VigilResetTokenService {
    * <ul>
    *   <li>Subject (email)
    *   <li>Expiration time
-   *   <li>Unique token ID (jti) for single-use enforcement
+   *   <li>Unique token ID ({@code jti}) for identification
    *   <li>Type claim ("reset")
    * </ul>
    *
@@ -141,8 +141,9 @@ public class VigilResetTokenService {
   /**
    * Validates and consumes a reset token.
    *
-   * <p>After calling this method, the token is blacklisted and cannot be used again. This prevents
-   * replay attacks.
+   * <p>After successful validation, this method blacklists the token against later reuse.
+   * Validation and blacklisting are separate operations; callers that may process the same token
+   * concurrently must serialize reset completion or enforce uniqueness in shared storage.
    *
    * @param token the reset token
    * @return the subject (email) from the token

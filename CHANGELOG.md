@@ -7,6 +7,12 @@ include migration notes.
 
 ## Unreleased
 
+- Consolidated public integration, compatibility, release, and async-security documentation;
+  removed the speculative roadmap and pinned upstream evidence to certified versions.
+- Corrected HS256 guidance to distinguish the 32-character validation boundary from required key
+  entropy, and clarified that concurrent reset-token completion must be serialized by the
+  application or shared storage.
+
 ## 7.2.0 - 2026-07-12
 
 - Added stateless Spring MVC async and streaming support based on a request-attribute
@@ -23,8 +29,8 @@ include migration notes.
 
 ## 7.0.0 - 2026-06-23
 
-- Certified Vigil for Spring Boot 4.1.x, Spring Framework 7.x, Spring Security
-  7.1.x, Java 25, Gradle 9.1.x, and Jackson 3.
+- Certified Vigil for Spring Boot 4.1.0, Spring Framework 7.0.8, Spring Security
+  7.1.0, Java 25, Gradle 9.1.x, and Jackson 3.
 - Updated build tooling to Spring Boot 4.1.0, Java 25 toolchains, Gradle 9.1.0,
   JaCoCo 0.8.14, Checkstyle 13.6.0, and google-java-format 1.28.0.
 - Added starter auto-configuration compatibility tests that prove Vigil core

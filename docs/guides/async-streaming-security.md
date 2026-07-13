@@ -4,30 +4,12 @@ Vigil preserves an authenticated Spring Security context for the lifetime of one
 including its `ASYNC` and `ERROR` redispatches. It does not create an `HttpSession`, revalidate a
 JWT during redispatch, or weaken the application's authorization rules.
 
-## Secure stateless configuration
+## Required security-chain configuration
 
-Use Vigil's request-scoped repository in the application's filter chain. Keep authorization rules
-application-owned and continue authorizing every dispatcher type.
-
-```java
-@Bean
-SecurityFilterChain securityFilterChain(
-    HttpSecurity http,
-    VigilAuthenticationFilter vigilAuthenticationFilter) throws Exception {
-  var requestSecurityContextRepository = new RequestAttributeSecurityContextRepository();
-  vigilAuthenticationFilter.setSecurityContextRepository(requestSecurityContextRepository);
-  return http
-      .sessionManagement(session ->
-          session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-      .securityContext(context ->
-          context.securityContextRepository(requestSecurityContextRepository))
-      .authorizeHttpRequests(authorize -> authorize
-          .requestMatchers("/auth/**").permitAll()
-          .anyRequest().authenticated())
-      .addFilterBefore(vigilAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-      .build();
-}
-```
+Use the complete stateless `SecurityFilterChain` in the
+[authentication guide](authentication.md#2-install-the-authentication-filter). The filter and
+Spring Security must use the same `RequestAttributeSecurityContextRepository`. Keep authorization
+rules application-owned and continue authorizing every dispatcher type.
 
 Vigil validates credentials and runs authentication hooks and context populators only on the
 initial `REQUEST`. After successful authentication it saves the `SecurityContext` in a
@@ -66,18 +48,12 @@ not arbitrary application `ThreadLocal` values.
 ## Source-backed decisions
 
 The complete auditable research record, including upstream source/tests, issue evidence, and the
-alternatives matrix, is in [async and streaming security research](../research/async-streaming-security-sources.md).
-
-- [Jakarta Servlet 6.1](https://jakarta.ee/specifications/servlet/6.1/jakarta-servlet-spec-6.1.pdf): `ASYNC` is a dispatch of the same request, supporting request attributes rather than token replay or sessions.
-- [Spring Framework async MVC](https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-ann-async.html): documents final dispatch and emitter `IOException` handling.
-- [Spring Security context persistence](https://docs.spring.io/spring-security/reference/7.0/servlet/authentication/persistence.html): defines request-attribute persistence and explicit saving for custom authentication.
-- [Spring Security authorization](https://docs.spring.io/spring-security/reference/7.0/servlet/authorization/authorize-http-requests.html): dispatcher authorization remains application policy.
-- [Spring Security issue 12758](https://github.com/spring-projects/spring-security/issues/12758): maintainers prescribe this repository for the equivalent JWT and `StreamingResponseBody` failure.
-- [Spring Framework issue 33439](https://github.com/spring-projects/spring-framework/issues/33439): disconnect timing is network/container dependent.
+alternatives matrix, is in [async and streaming security evidence](../architecture/async-streaming-evidence.md).
 
 ## Migration
 
 Synchronous integrations keep their behavior. Async applications must install a
-`RequestAttributeSecurityContextRepository` in `HttpSecurity` as shown above. Remove broad
+`RequestAttributeSecurityContextRepository` in `HttpSecurity` as shown in the authentication
+guide. Remove broad
 `dispatcherTypeMatchers(ASYNC, ERROR).permitAll()` workarounds after verifying application error
 routes. No token, cookie, route, or authorization contract changes are required.

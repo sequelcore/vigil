@@ -39,8 +39,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
  *
  * <ul>
  *   <li><b>Ignored paths:</b> Skip all processing (no tenant, no auth, no populators)
- *   <li><b>Public paths:</b> Permit anonymous, but authenticate if credentials present
- *   <li><b>Protected paths:</b> Require authentication (Spring Security handles 401)
+ *   <li><b>Public paths:</b> Continue without credentials, but authenticate them when present;
+ *       Spring Security still decides access
+ *   <li><b>Other paths:</b> Record missing credentials and let Spring Security decide access
  * </ul>
  *
  * <p>Flow:
@@ -50,8 +51,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
  *   <li>Extract tenant context from header (if enabled)
  *   <li>Attempt JWT authentication (if credentials present)
  *   <li>Attempt session authentication (if JWT absent/failed and session enabled)
- *   <li>Authorization decision: proceed based on path type and auth status
- *   <li>Populate custom contexts via {@link VigilContextPopulator}
+ *   <li>Populate custom contexts according to path type and authentication status
  * </ol>
  */
 public class VigilAuthenticationFilter extends OncePerRequestFilter {
@@ -146,7 +146,7 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
         // Authenticated - SecurityContext already set by authenticateJwt/authenticateSession
         populateContexts(request, authenticatedClaims);
       } else if (isPublicPath(path)) {
-        // Public path - permit anonymous access
+        // Public path - continue without credentials; Spring Security still decides access
         populateContexts(request, null);
       } else {
         // Protected path without authentication
@@ -354,7 +354,7 @@ public class VigilAuthenticationFilter extends OncePerRequestFilter {
   }
 
   /**
-   * Checks if the given path permits anonymous access (but authenticates if credentials present).
+   * Checks if the given path continues without credentials while authenticating them when present.
    */
   protected boolean isPublicPath(String path) {
     return publicPathMatcher.matches(path);

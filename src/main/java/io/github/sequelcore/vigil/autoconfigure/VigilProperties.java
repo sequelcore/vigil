@@ -91,8 +91,8 @@ public record VigilProperties(
   /**
    * JWT token configuration.
    *
-   * @param secret HMAC signing secret — minimum 32 characters per RFC 8725bis; required when {@code
-   *     algorithm=HS256}, ignored when {@code algorithm=RS256}
+   * @param secret HMAC signing secret, at least 32 characters; required when {@code
+   *     algorithm=HS256}. Use randomly generated key material with at least 256 bits of entropy.
    * @param accessTtl access token time-to-live
    * @param refreshTtl refresh token time-to-live
    * @param issuer optional token issuer claim ({@code iss}); validated on parse when set
@@ -170,7 +170,7 @@ public record VigilProperties(
       if (algorithm == Algorithm.HS256) {
         if (secret == null || secret.length() < 32) {
           throw new IllegalArgumentException(
-              "vigil.jwt.secret must be at least 32 characters (256 bits) per RFC 8725bis."
+              "vigil.jwt.secret must be at least 32 characters."
                   + (secret != null ? " Current length: " + secret.length() : " Value is null."));
         }
       }
@@ -373,7 +373,8 @@ public record VigilProperties(
    * Authentication filter configuration.
    *
    * @param ignoredPaths paths that bypass ALL processing (no tenant, no auth, no populators)
-   * @param publicPaths paths that permit anonymous but authenticate if credentials present
+   * @param publicPaths paths that continue without credentials but authenticate them when present;
+   *     application authorization rules still decide access
    * @param profilePaths mapping of profile name to path patterns for cookie resolution
    */
   public record Filter(
