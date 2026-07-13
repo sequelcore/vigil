@@ -2,7 +2,9 @@
 
 ## Supported Versions
 
-Until a stable public support policy is adopted, only the current `main` branch receives security fixes.
+Vigil 7.2.x and the current `main` branch receive security fixes. Older release lines are
+unsupported unless a security advisory states otherwise. See the
+[compatibility reference](docs/reference/compatibility.md).
 
 ## Reporting A Vulnerability
 

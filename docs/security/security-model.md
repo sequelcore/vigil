@@ -3,7 +3,8 @@
 ## Security invariants
 
 - Validate signed JWTs, configured issuer, and configured audience before trusting claims.
-- Keep HS256 secrets at least 256 bits and limit signing authority to trusted services.
+- Keep HS256 secrets at least 32 characters, generated from at least 256 bits of random entropy,
+  and limit signing authority to trusted services.
 - Prefer RS256 and JWKS where multiple services verify tokens but should not sign them.
 - Use HTTP-only, Secure cookies over HTTPS for browser flows.
 - Keep access tokens short-lived; use bounded clock skew only for known clock drift.
@@ -12,7 +13,15 @@
 
 ## Trust assumptions
 
-Vigil trusts application-supplied credential validation, user lookup, and shared state adapters. A custom `VigilBlacklistBackend` or `StepUpStore` is security-sensitive infrastructure: it must preserve TTLs and perform the documented read/consume operations atomically across application nodes.
+Vigil trusts application-supplied credential validation, user lookup, and shared state adapters. A
+custom `VigilBlacklistBackend` must preserve TTLs and make revocation state visible across nodes. A
+custom `StepUpStore` must additionally consume proofs atomically.
+
+`VigilResetTokenService.validateAndConsume` invalidates a reset token after validation, but the current
+blacklist contract does not provide an atomic consume operation. Applications that can process the
+same reset token concurrently must serialize reset completion or enforce uniqueness in shared
+storage. Do not treat reset tokens as equivalent to step-up proofs, whose store contract requires
+atomic consumption.
 
 ## Step-up controls
 

@@ -5,7 +5,7 @@ Contributions are welcome when they keep Vigil small, explicit, tested, and secu
 ## Development Requirements
 
 - Java 25.
-- Spring Boot 4.1.x compatibility.
+- Use the exact platform versions in the [compatibility reference](docs/reference/compatibility.md).
 - Use the Gradle wrapper, not a system Gradle requirement.
 
 ## Quality Gates
@@ -33,6 +33,8 @@ gradlew.bat build --no-daemon
 - Security-sensitive errors must not expose secrets, raw tokens, or parser internals.
 - Configuration should fail fast at startup when required security inputs are missing.
 - Architecture changes should update the relevant public docs in the same change.
+- Completed user-visible work belongs in `CHANGELOG.md`; speculative features belong in GitHub
+  Issues or Projects, not the active documentation tree.
 
 ## Scope Rules
 

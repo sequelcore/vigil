@@ -1,13 +1,14 @@
 # Vigil documentation
 
-Vigil is a Spring Boot starter for application-owned JWT authentication. It provides token lifecycle, request authentication, cookie helpers, tenant consistency, revocation, reset tokens, and step-up credential verification. It does not own users, product authorization, or identity-delivery flows.
+Vigil is a Spring Boot starter for application-owned JWT authentication. Read
+[system boundaries](architecture/system-boundaries.md) before integrating it into an application.
 
 ## Start here
 
-- [Async and streaming security](guides/async-streaming-security.md) — preserve stateless authentication across MVC redispatches.
-
 - [Authentication guide](guides/authentication.md) — configure JWTs, cookies, Spring Security, tenants, and reset tokens.
+- [Async and streaming security](guides/async-streaming-security.md) — preserve stateless authentication across MVC redispatches.
 - [Configuration reference](reference/configuration.md) — every `vigil.*` property and its defaults.
+- [Compatibility reference](reference/compatibility.md) — certified platform and dependency versions.
 - [System boundaries](architecture/system-boundaries.md) — understand ownership and extension points before integrating.
 - [Java API contract](api/java-api.md) — public services, SPIs, and compatibility expectations.
 - [Step-up proof decision](adr/0001-step-up-opaque-one-time-proofs.md) — why approvals are opaque and server-consumed.
@@ -22,6 +23,5 @@ Vigil is a Spring Boot starter for application-owned JWT authentication. It prov
 
 - [Testing and verification](development/testing.md) — local gates and integration coverage.
 - [Release policy](releases/release-policy.md) — compatibility, versioning, and publication controls.
-- [Roadmap](roadmap.md) — supported scope and deliberately deferred work.
 
 The root [README](../README.md) is the concise package landing page. This index is the canonical navigation surface for repository documentation.

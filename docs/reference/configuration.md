@@ -31,6 +31,10 @@ vigil:
 
 `rsa-private-key`, `rsa-public-key`, and `rsa-public-keys` accept inline PEM, `classpath:` or `file:` locations. RS256 automatically registers `/.well-known/jwks.json`.
 
+The HS256 length check counts characters; it does not measure entropy. Generate random key material
+with at least 256 bits of entropy and encode it without truncation. Do not use a human password or
+repeated text merely because it reaches 32 characters.
+
 ## Optional configuration
 
 ```yaml
@@ -90,7 +94,26 @@ vigil:
 
 ## Validation and deployment notes
 
+Spring Boot duration syntax is accepted for duration properties, for example `30s`, `15m`, and
+`7d`. Lists and maps use standard YAML binding.
+
+| Property | Validation or normalization |
+| --- | --- |
+| `jwt.secret` | Required for HS256; at least 32 characters |
+| `jwt.clock-skew` | Between `0s` and `5m` |
+| `jwt.rsa-private-key`, `jwt.rsa-public-key` | Both required for RS256 |
+| `password.strength` | BCrypt cost `4`–`31`; invalid values normalize to `12` |
+| `blacklist.max-size` | Non-positive values normalize to `10000` |
+| `blacklist.grace-period` | Values above `60s` normalize to `60s` |
+| `protection.max-attempts`, `protection.max-size` | Non-positive values normalize to their defaults |
+| `step-up.challenge-ttl`, `step-up.proof-ttl` | Non-positive values normalize to their defaults |
+| `step-up.pin.min-length` | Values below `4` normalize to `6` |
+| `step-up.pin.max-length` | Must be at least `min-length` and at most `128`; otherwise normalizes to `12` |
+| `step-up.pin.bcrypt-strength` | BCrypt cost `4`–`31`; invalid values normalize to `12` |
+
 - Invalid JWT signing configuration fails at application startup.
 - `secure: true` requires HTTPS for browser clients.
 - The built-in blacklist, protection, and step-up stores are node-local. See [deployment and operations](../operations/deployment.md) before running more than one instance.
-- Configuration only controls authentication infrastructure. Route authorization, user lifecycle, credential lookup, and business approval policy remain application-owned.
+- `public-paths` changes Vigil credential processing only. The application must configure its own
+  anonymous authorization rules.
+- Ownership details are canonical in [system boundaries](../architecture/system-boundaries.md).

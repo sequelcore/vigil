@@ -11,7 +11,7 @@ Vigil is authentication infrastructure for Spring Boot applications. It standard
 | JWT generation, validation, signing-key handling, JWKS, refresh rotation, and revocation | User persistence, lookup, registration, and credential enrollment UI |
 | Cookie and bearer-token extraction | Login, logout, reset, and recovery routes |
 | Request authentication filter and tenant consistency | `SecurityFilterChain` authorization rules and tenant membership |
-| Password hashing helpers and reset-token lifecycle | Password policy, recovery delivery, and account recovery UX |
+| Password hashing helpers and reset-token validation/invalidation | Password policy, recovery delivery, concurrent reset serialization, and account recovery UX |
 | Step-up challenge/proof lifecycle and credential-verifier SPI | Business approval policy, roles, limits, segregation of duties, and audit decision |
 
 Vigil is not an OAuth authorization server, OpenID Connect provider, hosted identity platform, user-management system, or business authorization engine.
