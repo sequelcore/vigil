@@ -12,6 +12,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -35,6 +36,11 @@ public class TestController {
   @GetMapping("/health")
   public String health() {
     return "ok";
+  }
+
+  @GetMapping("/csrf")
+  public String csrf(CsrfToken csrfToken) {
+    return csrfToken.getToken();
   }
 
   @GetMapping("/protected/hello")
