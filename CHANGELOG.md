@@ -7,6 +7,8 @@ include migration notes.
 
 ## Unreleased
 
+## 7.2.1 - 2026-07-12
+
 - Consolidated public integration, compatibility, release, and async-security documentation;
   removed the speculative roadmap and pinned upstream evidence to certified versions.
 - Corrected HS256 guidance to distinguish the 32-character validation boundary from required key
