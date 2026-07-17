@@ -5,7 +5,7 @@ plugins {
     id("com.diffplug.spotless") version "8.8.0"
     id("checkstyle")
     id("jacoco")
-    id("com.vanniktech.maven.publish") version "0.34.0"
+    id("com.vanniktech.maven.publish") version "0.37.0"
 }
 
 group = "io.github.sequelcore"
