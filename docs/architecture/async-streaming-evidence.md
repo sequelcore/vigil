@@ -31,8 +31,10 @@ tests, and issue discussions take precedence over secondary guidance.
   - [`SecurityFilterAutoConfiguration`](https://github.com/spring-projects/spring-boot/blob/v4.1.0/module/spring-boot-security/src/main/java/org/springframework/boot/security/autoconfigure/web/servlet/SecurityFilterAutoConfiguration.java)
   - [`SecurityFilterAutoConfigurationTests`](https://github.com/spring-projects/spring-boot/blob/v4.1.0/module/spring-boot-security/src/test/java/org/springframework/boot/security/autoconfigure/web/servlet/SecurityFilterAutoConfigurationTests.java)
 
-The local executable baseline resolves Spring Boot 4.1.0, Spring Framework MVC 7.0.8, Spring
-Security Web 7.1.0, Tomcat 11.0.22, and Servlet 6.1. Vigil does not claim unexecuted version ranges.
+The current executable baseline resolves Spring Boot 4.1.1, Spring Framework MVC 7.0.9, Spring
+Security Web 7.1.1, Tomcat 11.0.24, and Servlet 6.1. The source links above preserve the reviewed
+design evidence; the repository gate certifies the current dependency baseline. Vigil does not
+claim unexecuted version ranges.
 
 ## Official issue evidence
 

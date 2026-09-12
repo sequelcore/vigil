@@ -7,14 +7,14 @@ supported until that combination passes the complete repository gate.
 
 | Component | Certified version |
 | --- | --- |
-| Vigil | 7.2.1 |
+| Vigil | 7.3.0 |
 | Java | 25 |
-| Spring Boot BOM | 4.1.0 |
-| Spring Framework MVC | 7.0.8 |
-| Spring Security Web | 7.1.0 |
-| Jackson Databind | 3.1.4, through `tools.jackson` packages |
-| Gradle wrapper | 9.6.1 |
-| Embedded test container | Tomcat 11.0.22, implementing Servlet 6.1 |
+| Spring Boot BOM | 4.1.1 |
+| Spring Framework MVC | 7.0.9 |
+| Spring Security Web | 7.1.1 |
+| Jackson Databind | 3.1.5, through `tools.jackson` packages |
+| Gradle wrapper | 9.7.1 |
+| Embedded test container | Tomcat 11.0.24, implementing Servlet 6.1 |
 
 Vigil 6.0.x was the final Java 21 and Spring Boot 3.5 line. It is not a compatibility target for
 Spring Boot 4 applications. The Jackson 2 to Jackson 3 constructor change was released in Vigil

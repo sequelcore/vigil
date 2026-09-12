@@ -7,11 +7,25 @@ include migration notes.
 
 ## Unreleased
 
+## 7.3.0 - 2026-09-12
+
 - Added opt-in, route-free self-service contact enrollment with application-owned canonicalization,
   delivery, abuse-control, identity, and durable atomic-store ports. Proofs are 256-bit opaque
   values stored only as domain-separated SHA-256 digests; verification creates an idempotent host
   receipt and never creates sessions, credentials, or email-based account links. Host credential
   completion is first-write-wins by that receipt, so proof replay cannot replace a credential.
+- Updated the certified platform to Spring Boot 4.1.1, Spring Framework MVC 7.0.9, Spring Security
+  Web 7.1.1, Jackson Databind 3.1.5, Tomcat 11.0.24, and Gradle 9.7.1.
+- Updated Spotless to 8.10.2, google-java-format to 1.36.1, Maven Publish to 0.37.0, and
+  `actions/setup-java` to v6.
+- Hardened Maven Central publication so the workflow dispatch and checkout must both target the
+  exact release tag before the protected release environment can access credentials.
+- Stabilized the embedded-Tomcat SSE disconnect test around deterministic transport-failure and
+  completion evidence without changing production streaming behavior.
+
+Migration: existing consumers require no changes because enrollment remains disabled by default.
+Applications that enable it must provide all five host ports and follow the durable-store and
+receipt-idempotency requirements in the contact enrollment guide.
 
 ## 7.2.1 - 2026-07-12
 

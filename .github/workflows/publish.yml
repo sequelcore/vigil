@@ -18,7 +18,6 @@ on:
       release_version:
         description: "Vigil release version."
         required: true
-        default: "6.0.0"
       doppler_project:
         description: "Doppler project containing release secrets."
         required: true
@@ -90,7 +89,13 @@ jobs:
           fi
 
           expected_ref="v${RELEASE_VERSION}"
+          expected_workflow_ref="refs/tags/${expected_ref}"
           expected_confirmation="publish ${RELEASE_VERSION}"
+
+          if [[ "$GITHUB_REF" != "$expected_workflow_ref" ]]; then
+            echo "Publishing requires the workflow dispatch ref to be $expected_ref."
+            exit 1
+          fi
 
           if [[ "$RELEASE_REF" != "$expected_ref" ]]; then
             echo "Publishing requires release_ref=$expected_ref."
