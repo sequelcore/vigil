@@ -52,3 +52,11 @@ callback destinations must come from trusted host configuration, never from enro
 parameters.
 
 If host receipt application fails after verification, `recover` can retry the same receipt. Recovery cannot repair a missing, expired, superseded, or incorrectly implemented store record; hosts need an operational process to retry durable `VERIFIED_PENDING_APPLY` receipts.
+
+## Migration
+
+Existing applications require no changes because enrollment is disabled by default and registers
+no routes, tables, providers, or beans until enabled. To adopt it, enable `vigil.enrollment`, set a
+trusted audience, provide all five host-owned ports, and expose application-owned POST endpoints
+for start, resend, verification, and any receipt recovery workflow. Do not enable the module with a
+process-local store or advisory-only abuse control.
