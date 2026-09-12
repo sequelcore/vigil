@@ -9,13 +9,22 @@
 - Use HTTP-only, Secure cookies over HTTPS for browser flows.
 - Keep access tokens short-lived; use bounded clock skew only for known clock drift.
 - Treat user storage, credential verification, business authorization, and recovery delivery as application responsibilities.
-- Never log raw tokens, keys, PINs, credential hashes, reset tokens, or step-up proof values.
+- Never log raw tokens, keys, PINs, credential hashes, reset tokens, step-up proof values,
+  enrollment proofs, or full enrollment email addresses.
 
 ## Trust assumptions
 
 Vigil trusts application-supplied credential validation, user lookup, and shared state adapters. A
 custom `VigilBlacklistBackend` must preserve TTLs and make revocation state visible across nodes. A
 custom `StepUpStore` must additionally consume proofs atomically.
+
+An enabled `EnrollmentStore` must atomically create one verification receipt, retain it across host
+apply failure, enforce generation-conditional delivery outcomes, and acknowledge completion only
+for that receipt. `EnrollmentIdentityPort` must make receipt application transactional and
+idempotent; Vigil deliberately does not issue an identity/session after email proof verification.
+A repeated completion is only an idempotent acknowledgement. Hosts must bind credential completion
+to the receipt recorded during `applyVerifiedContact`, accept the first credential transaction
+only, and invalidate or keep untrusted any credential or session established before proof.
 
 `VigilResetTokenService.validateAndConsume` invalidates a reset token after validation, but the current
 blacklist contract does not provide an atomic consume operation. Applications that can process the

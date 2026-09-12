@@ -13,6 +13,7 @@ Vigil is authentication infrastructure for Spring Boot applications. It standard
 | Request authentication filter and tenant consistency | `SecurityFilterChain` authorization rules and tenant membership |
 | Password hashing helpers and reset-token validation/invalidation | Password policy, recovery delivery, concurrent reset serialization, and account recovery UX |
 | Step-up challenge/proof lifecycle and credential-verifier SPI | Business approval policy, roles, limits, segregation of duties, and audit decision |
+| Opt-in contact-proof lifecycle and receipt orchestration | Enrollment routes, user records, email delivery, canonicalization, abuse controls, durable atomic state, and receipt application |
 
 Vigil is not an OAuth authorization server, OpenID Connect provider, hosted identity platform, user-management system, or business authorization engine.
 
@@ -39,6 +40,9 @@ Applications add `VigilAuthenticationFilter` inside Spring Security's filter cha
 | `StepUpStore` | atomic shared step-up challenge/proof state | storing PINs or users |
 | `StepUpCredentialVerifier` | a credential method such as PIN or a future passkey | product-specific approval logic |
 | `PinCredentialStore` | tenant-scoped personal PIN hashes | raw PIN storage |
+| `EnrollmentStore` | atomic, durable contact-proof and receipt lifecycle | users, credentials, an in-memory/single-node implementation, or load/save coordination |
+| `EnrollmentIdentityPort` | transactionally applying a verified receipt | user lookup, auto-linking by email, session issuance, or credential creation |
+| `EnrollmentDeliveryPort` | application-owned proof delivery | logging proof values or full email addresses |
 
 ## Compatibility boundary
 
