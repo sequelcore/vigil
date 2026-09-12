@@ -9,6 +9,10 @@ revocation, reset tokens, and reusable step-up credential verification. Applicat
 ownership of users and business authorization; the complete boundary is documented in
 [system boundaries](docs/architecture/system-boundaries.md).
 
+An optional, route-free contact-enrollment primitive is also available for applications that
+provide durable storage, email delivery, identity application, canonicalization, and abuse-control
+ports. It never creates credentials or sessions; see the [enrollment decision](docs/adr/0002-opt-in-contact-enrollment.md).
+
 ## Compatibility
 
 Vigil `7.2.1` is certified with Java 25 and Spring Boot 4.1.0. See the

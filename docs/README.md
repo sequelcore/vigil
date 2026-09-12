@@ -13,6 +13,10 @@ Vigil is a Spring Boot starter for application-owned JWT authentication. Read
 - [Java API contract](api/java-api.md) — public services, SPIs, and compatibility expectations.
 - [Step-up proof decision](adr/0001-step-up-opaque-one-time-proofs.md) — why approvals are opaque and server-consumed.
 
+- [Enrollment decision](adr/0002-opt-in-contact-enrollment.md) - why email contact verification is opt-in, route-free, and host-owned.
+
+- [Contact enrollment guide](guides/contact-enrollment.md) - integrate explicit host-owned contact verification without routes or credentials in Vigil.
+
 ## Security and operations
 
 - [Security model](security/security-model.md) — security controls, threat assumptions, and secret-handling rules.

@@ -1,1 +1,2 @@
 io.github.sequelcore.vigil.autoconfigure.VigilAutoConfiguration
+io.github.sequelcore.vigil.enrollment.EnrollmentAutoConfiguration

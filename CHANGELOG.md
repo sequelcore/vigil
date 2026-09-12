@@ -7,6 +7,12 @@ include migration notes.
 
 ## Unreleased
 
+- Added opt-in, route-free self-service contact enrollment with application-owned canonicalization,
+  delivery, abuse-control, identity, and durable atomic-store ports. Proofs are 256-bit opaque
+  values stored only as domain-separated SHA-256 digests; verification creates an idempotent host
+  receipt and never creates sessions, credentials, or email-based account links. Host credential
+  completion is first-write-wins by that receipt, so proof replay cannot replace a credential.
+
 ## 7.2.1 - 2026-07-12
 
 - Consolidated public integration, compatibility, release, and async-security documentation;

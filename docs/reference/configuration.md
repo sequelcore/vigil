@@ -90,6 +90,15 @@ vigil:
       max-length: 12
       bcrypt-strength: 12
       reject-common-patterns: true
+
+  enrollment:
+    enabled: false
+    audience: enrollment-api # required only when enabled; trusted by configuration, never a request field
+    proof-ttl: 15m
+    total-lifetime: 24h
+    attempt-limit: 5
+    resend-limit: 3
+    resend-cooldown: 1m
 ```
 
 ## Validation and deployment notes
@@ -110,10 +119,16 @@ Spring Boot duration syntax is accepted for duration properties, for example `30
 | `step-up.pin.min-length` | Values below `4` normalize to `6` |
 | `step-up.pin.max-length` | Must be at least `min-length` and at most `128`; otherwise normalizes to `12` |
 | `step-up.pin.bcrypt-strength` | BCrypt cost `4`–`31`; invalid values normalize to `12` |
+| `enrollment.audience` | Required and non-blank when `enrollment.enabled=true`; fixed trusted proof audience |
+| `enrollment.proof-ttl`, `enrollment.total-lifetime` | Positive; total lifetime must be at least proof TTL |
+| `enrollment.attempt-limit`, `enrollment.resend-limit` | Attempt limit positive; resend limit non-negative |
+| `enrollment.resend-cooldown` | Cannot be negative |
 
 - Invalid JWT signing configuration fails at application startup.
 - `secure: true` requires HTTPS for browser clients.
 - The built-in blacklist, protection, and step-up stores are node-local. See [deployment and operations](../operations/deployment.md) before running more than one instance.
+- Enrollment has no built-in store or delivery adapter. When enabled, every enrollment host port is
+  required and missing ports fail startup; its store must be durable and atomic across instances.
 - `public-paths` changes Vigil credential processing only. The application must configure its own
   anonymous authorization rules.
 - Ownership details are canonical in [system boundaries](../architecture/system-boundaries.md).
