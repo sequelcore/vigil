@@ -31,15 +31,25 @@ budgets. Existing receipts remain recoverable without the key.
 ## Host flow
 
 1. A host `POST` start or resend endpoint calls `EnrollmentService.start` or `resend` and always returns the same generic response, whether the request is suppressed, an account exists, or delivery has a retryable failure.
-2. A `GET` verification-link endpoint only renders the host page. It must not consume the proof.
-3. An explicit host `POST` submits email, opaque context ID/version, and proof to `verify`. The service applies a verified receipt through the host identity transaction before returning `COMPLETED`.
-4. Only after `COMPLETED` may the host open a host-owned password-enrollment step. Persist the
-   credential with a first-write-wins transaction keyed by the receipt recorded by
-   `applyVerifiedContact`; replay or concurrent requests for that receipt must not replace it.
+2. For `OPAQUE_TOKEN`, a `GET` verification-link endpoint may render a host interstitial but must
+   not consume the proof. For `DECIMAL_CODE`, render a host code-entry form. Neither transport
+   proves that the browser or user is continuous with the registration ceremony.
+3. Before calling `verify`, a host with a pending password verifier validates its server-issued,
+   fixation-resistant ceremony secret and CSRF protection, then loads email/context/version from
+   that server-side ceremony and requires explicit completion intent. A missing or cross-device
+   ceremony must not call `verify`; start an independent registration with a new context/version,
+   password, ceremony, and proof. Never let an unauthenticated request retire another ceremony by
+   naming its email or context.
+4. The host submits the configured proof to `verify` only after that admission. `APPLIED` means the
+   host applied the receipt; `COMPLETED` means Vigil acknowledged it. After `COMPLETED`, a host that
+   finalizes credentials revalidates the ceremony and consumes its receipt-bound permission
+   first-write-wins while creating the credential.
 
 Enrollment has no session, cookie, token, or credential-issuance API. The host must invalidate or
 keep untrusted every credential and session established before proof, and keep its existing session
-policy independent of this contact-only lifecycle.
+policy independent of this contact-only lifecycle. Email equality alone never authorizes linking
+to an existing account; linking a social or federated identity requires host proof of control of
+both identities.
 
 `EnrollmentDelivery` contains the proof format, original requested email for display/delivery, and
 canonical email key. Use `proofFormat()` to select the host template; it does not transfer proof
@@ -84,6 +94,15 @@ callback destinations must come from trusted host configuration, never from enro
 parameters.
 
 If host receipt application fails after verification, `recover` can retry the same receipt. Recovery cannot repair a missing, expired, superseded, or incorrectly implemented store record; hosts need an operational process to retry durable `VERIFIED_PENDING_APPLY` receipts.
+
+## Host-owned pending password state
+
+Keep pending verifier, ceremony, and optional finalization state in protected host registration
+storage, never in authentication, reset, session, linking, logs, telemetry, support exports, or
+unnecessary backups. Retire them on expiry, abandonment, cancellation, supersession, binding or
+password changes, and obsolete password-cost policy. Credential activation must also enforce host
+identity/registration uniqueness across distinct receipts. The complete contract is in
+[ADR 0004](../adr/0004-host-owned-pending-password-state.md).
 
 ## Migration
 

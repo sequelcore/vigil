@@ -32,9 +32,11 @@ route. Start/resend return a generic result and send no proof to their caller. `
 transactionally and idempotently by receipt ID, while rechecking its context ID/version. An
 `APPLIED` outcome reaches `COMPLETED`; an authoritative `REJECTED` outcome is durably terminal.
 Exceptions and ambiguous outcomes remain recoverable rather than being marked complete. A
-repeated `COMPLETED` result is an idempotent acknowledgement only; the host must consume any later
-credential-enrollment permission first-write-wins by the receipt recorded in its identity
-transaction.
+repeated `COMPLETED` result is an idempotent acknowledgement only. A host with pending credential
+state validates its protected registration ceremony before calling `verify`; only a
+credential-finalizing host may later consume a receipt-bound permission first-write-wins after
+`COMPLETED`. A receipt does not authorize a password, session, or account link. See
+[ADR 0004](../adr/0004-host-owned-pending-password-state.md).
 
 `EnrollmentProofFormat` is the closed proof representation contract. `OPAQUE_TOKEN` remains the
 default; `DECIMAL_CODE` is an opt-in eight-digit value. `EnrollmentDelivery.proofFormat()` lets the
@@ -50,8 +52,9 @@ generation and verification; there is no cross-format transition fallback.
 No enrollment API accepts a password or returns/creates a session, token, credential, or account
 link. `EnrollmentStore` must provide the atomic operations named by its interface; it cannot be
 implemented as a load/save repository or local lock. See
-[ADR 0002](../adr/0002-opt-in-contact-enrollment.md) and
-[ADR 0003](../adr/0003-opt-in-human-entered-enrollment-codes.md).
+[ADR 0002](../adr/0002-opt-in-contact-enrollment.md),
+[ADR 0003](../adr/0003-opt-in-human-entered-enrollment-codes.md), and
+[ADR 0004](../adr/0004-host-owned-pending-password-state.md).
 
 ## Configuration
 

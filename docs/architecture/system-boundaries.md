@@ -41,7 +41,7 @@ Applications add `VigilAuthenticationFilter` inside Spring Security's filter cha
 | `StepUpCredentialVerifier` | a credential method such as PIN or a future passkey | product-specific approval logic |
 | `PinCredentialStore` | tenant-scoped personal PIN hashes | raw PIN storage |
 | `EnrollmentStore` | atomic, durable contact-proof and receipt lifecycle | users, credentials, an in-memory/single-node implementation, or load/save coordination |
-| `EnrollmentIdentityPort` | transactionally applying a verified receipt | user lookup, auto-linking by email, session issuance, or credential creation |
+| `EnrollmentIdentityPort` | transactionally applying a verified receipt and, when supported, recording finalization permission | user lookup, auto-linking by email, session issuance, credential creation, or credential activation |
 | `EnrollmentDeliveryPort` | application-owned proof delivery | logging proof values or full email addresses |
 
 ## Compatibility boundary

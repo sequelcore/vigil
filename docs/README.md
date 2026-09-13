@@ -17,6 +17,8 @@ Vigil is a Spring Boot starter for application-owned JWT authentication. Read
 
 - [Enrollment proof-format decision](adr/0003-opt-in-human-entered-enrollment-codes.md) - why manual codes are a closed opt-in format with keyed digests.
 
+- [Pending password-state decision](adr/0004-host-owned-pending-password-state.md) - why hosts may choose form order but must bind credential activation to continuity.
+
 - [Contact enrollment guide](guides/contact-enrollment.md) - integrate explicit host-owned contact verification without routes or credentials in Vigil.
 
 ## Security and operations

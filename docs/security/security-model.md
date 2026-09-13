@@ -22,9 +22,18 @@ An enabled `EnrollmentStore` must atomically create one verification receipt, re
 apply failure, enforce generation-conditional delivery outcomes, and acknowledge completion only
 for that receipt. `EnrollmentIdentityPort` must make receipt application transactional and
 idempotent; Vigil deliberately does not issue an identity/session after email proof verification.
-A repeated completion is only an idempotent acknowledgement. Hosts must bind credential completion
-to the receipt recorded during `applyVerifiedContact`, accept the first credential transaction
-only, and invalidate or keep untrusted any credential or session established before proof.
+A repeated completion is only an idempotent acknowledgement. A receipt is durable evidence that
+Vigil accepted the bound contact proof, not that the host applied it or granted credential
+authority. Before a host submits a proof for a pending
+password verifier, it must validate a server-protected, CSRF-bound registration ceremony and derive
+the enrollment binding from that state. Without it, including cross-device proof presentation, it
+must not call `verify` for that pending lifecycle; it may start an independent ceremony without
+inheriting authority. An unauthenticated request cannot retire another ceremony. After
+`COMPLETED`, a credential-finalizing host revalidates that ceremony and consumes any receipt-bound
+permission first-write-wins. Keep
+pending verifier and ceremony data out of logs, telemetry, support exports, and unnecessary
+backups. Email equality never authorizes account linking; federated linking requires explicit host
+proof of both identities. See [ADR 0004](../adr/0004-host-owned-pending-password-state.md).
 
 Opaque enrollment tokens retain their domain-separated SHA-256 digest. Human-entered decimal codes
 use HMAC-SHA-256 with a dedicated 32-byte key and bind the format, canonical email, context

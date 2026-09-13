@@ -15,16 +15,16 @@ ports. It never creates credentials or sessions; see the [enrollment decision](d
 
 ## Compatibility
 
-Vigil `8.0.0` is certified with Java 25 and Spring Boot 4.1.1. See the
+Vigil `8.0.1` is certified with Java 25 and Spring Boot 4.1.1. See the
 [compatibility reference](docs/reference/compatibility.md) for the complete tested combination.
 
-`8.0.0` is the current release line. Public consumers should pin an exact version and review the release notes before upgrading.
+`8.0.1` is the current release line. Public consumers should pin an exact version and review the release notes before upgrading.
 
 ## Install
 
 ```kotlin
 dependencies {
-    implementation("io.github.sequelcore:vigil-spring-boot-starter:8.0.0")
+    implementation("io.github.sequelcore:vigil-spring-boot-starter:8.0.1")
 }
 ```
 
