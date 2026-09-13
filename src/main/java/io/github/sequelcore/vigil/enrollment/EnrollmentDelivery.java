@@ -13,6 +13,7 @@ public final class EnrollmentDelivery {
   private final String purpose;
   private final UUID lifecycleId;
   private final long generation;
+  private final EnrollmentProofFormat proofFormat;
   private final String proof;
   private final Instant expiresAt;
 
@@ -22,6 +23,7 @@ public final class EnrollmentDelivery {
       String audience,
       String purpose,
       EnrollmentStartOutcome outcome,
+      EnrollmentProofFormat proofFormat,
       String proof) {
     this.originalEmail = request.email();
     this.canonicalEmail = canonicalEmail;
@@ -31,6 +33,7 @@ public final class EnrollmentDelivery {
     this.purpose = purpose;
     this.lifecycleId = outcome.lifecycleId();
     this.generation = outcome.generation();
+    this.proofFormat = proofFormat;
     this.proof = proof;
     this.expiresAt = outcome.proofExpiresAt();
   }
@@ -66,6 +69,11 @@ public final class EnrollmentDelivery {
 
   public long generation() {
     return generation;
+  }
+
+  /** Identifies how the application should present the proof without owning its security policy. */
+  public EnrollmentProofFormat proofFormat() {
+    return proofFormat;
   }
 
   public String proof() {

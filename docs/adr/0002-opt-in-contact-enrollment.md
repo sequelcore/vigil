@@ -13,9 +13,19 @@ Vigil exposes a route-free `io.github.sequelcore.vigil.enrollment` module only w
 
 An application must supply all five ports: `EmailCanonicalizer`, `EnrollmentIdentityPort`, `EnrollmentDeliveryPort`, `EnrollmentAbuseControl`, and a durable atomic `EnrollmentStore`. Missing ports fail startup. `EnrollmentIdentityPort.applyVerifiedContact(receipt)` must be transactional, receipt-ID idempotent, and recheck the opaque context ID/version before changing application state.
 
-The service generates a 256-bit Base64URL proof and persists only a domain-separated SHA-256 digest through the store. The proof is bound to the fixed enrollment purpose, configured trusted audience, canonical email key, host context ID/version, generation, proof TTL, and total lifecycle. The store, rather than a process-local lock, atomically handles start/resend, receipt creation, delivery outcomes, and completion acknowledgment.
+The default proof is a 256-bit Base64URL value whose domain-separated SHA-256 digest is persisted
+through the store. [ADR 0003](0003-opt-in-human-entered-enrollment-codes.md) adds a closed opt-in
+decimal-code representation with a keyed digest without changing this lifecycle or its default.
+Every proof is bound to the fixed enrollment purpose, configured trusted audience, canonical email
+key, host context ID/version, generation, proof TTL, and total lifecycle. The store, rather than a
+process-local lock, atomically handles start/resend, receipt creation, delivery outcomes, and
+completion acknowledgment.
 
-The original requested email is retained separately only for the delivery adapter; the canonical email is the storage, proof-binding, and abuse-control key. A duplicate start for an active lifecycle is a no-op and cannot reset its lifetime, attempts, resend count, generation, or cooldown. Verification itself is admitted fail-closed before proof hashing or store access and accepts only canonical 32-byte Base64URL proofs.
+The original requested email is retained separately only for the delivery adapter; the canonical
+email is the storage, proof-binding, and abuse-control key. A duplicate start for an active
+lifecycle is a no-op and cannot reset its lifetime, attempts, resend count, generation, or
+cooldown. Verification itself is admitted fail-closed before proof hashing or store access and
+accepts only a canonical configured proof representation.
 
 Context ID, audience, and purpose form the stable enrollment identity. Email and context version
 are mutable bindings: an atomic start with either changed supersedes every earlier lifecycle for

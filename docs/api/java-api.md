@@ -36,9 +36,22 @@ repeated `COMPLETED` result is an idempotent acknowledgement only; the host must
 credential-enrollment permission first-write-wins by the receipt recorded in its identity
 transaction.
 
+`EnrollmentProofFormat` is the closed proof representation contract. `OPAQUE_TOKEN` remains the
+default; `DECIMAL_CODE` is an opt-in eight-digit value. `EnrollmentDelivery.proofFormat()` lets the
+application select its template without taking ownership of generation or validation. Both formats
+use the same `proof` field and `EnrollmentService` operations; there are no parallel code-specific
+methods or proof-strategy SPI.
+
+Vigil 8.0 has one canonical constructor for each enrollment contract. Direct
+`EnrollmentProperties` construction includes `proofFormat` and `codeHmacKey`, and direct
+`EnrollmentDelivery` construction includes `proofFormat`. The configured format governs both
+generation and verification; there is no cross-format transition fallback.
+
 No enrollment API accepts a password or returns/creates a session, token, credential, or account
 link. `EnrollmentStore` must provide the atomic operations named by its interface; it cannot be
-implemented as a load/save repository or local lock. See [ADR 0002](../adr/0002-opt-in-contact-enrollment.md).
+implemented as a load/save repository or local lock. See
+[ADR 0002](../adr/0002-opt-in-contact-enrollment.md) and
+[ADR 0003](../adr/0003-opt-in-human-entered-enrollment-codes.md).
 
 ## Configuration
 

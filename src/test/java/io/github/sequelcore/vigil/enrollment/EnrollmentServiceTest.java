@@ -1,5 +1,6 @@
 package io.github.sequelcore.vigil.enrollment;
 
+import static io.github.sequelcore.vigil.enrollment.EnrollmentVerificationResult.REJECTED;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.sequelcore.vigil.auth.VigilResetTokenService;
@@ -52,10 +53,43 @@ class EnrollmentServiceTest {
     EnrollmentDelivery sent = delivery.latest();
     assertThat(sent.originalEmail()).isEqualTo(EMAIL);
     assertThat(sent.canonicalEmail()).isEqualTo(CANONICAL_EMAIL);
+    assertThat(sent.proofFormat()).isEqualTo(EnrollmentProofFormat.OPAQUE_TOKEN);
     assertThat(store.state.canonicalEmail).isEqualTo(CANONICAL_EMAIL);
     assertThat(store.state.proofDigest).isEqualTo(domainDigest(sent.proof()));
     assertThat(store.state.proofDigest).isNotEqualTo(sent.proof());
     assertThat(sent.toString()).doesNotContain(EMAIL).doesNotContain(sent.proof());
+  }
+
+  @Test
+  void deliversAndVerifiesAnOptInDecimalCode() {
+    service = newService(EnrollmentTestProperties.decimalCode("vigil-test", 3));
+    service.start(start());
+    EnrollmentDelivery sent = delivery.latest();
+    assertThat(sent.proofFormat()).isEqualTo(EnrollmentProofFormat.DECIMAL_CODE);
+    assertThat(sent.proof()).matches("[0-9]{8}");
+    assertThat(store.state.proofDigest).hasSize(43).isNotEqualTo(sent.proof());
+    assertThat(service.verify(verify(sent.proof())))
+        .isEqualTo(EnrollmentVerificationResult.COMPLETED);
+  }
+
+  @Test
+  void decimalCodeAttemptsRemainBoundedAcrossResend() {
+    service = newService(EnrollmentTestProperties.decimalCode("vigil-test", 3));
+    service.start(start());
+    String first = delivery.latest().proof();
+    assertThat(service.verify(verify(differentCode(first))))
+        .isEqualTo(EnrollmentVerificationResult.REJECTED);
+    clock.advance(Duration.ofMinutes(1));
+    service.resend(start());
+    String current = delivery.latest().proof();
+    String secondWrong = differentCode(current);
+    assertThat(service.verify(verify(secondWrong)))
+        .isEqualTo(EnrollmentVerificationResult.REJECTED);
+    assertThat(service.verify(verify(differentCode(secondWrong))))
+        .isEqualTo(EnrollmentVerificationResult.REJECTED);
+    assertThat(service.verify(verify(current))).isEqualTo(EnrollmentVerificationResult.REJECTED);
+    assertThat(store.state.attempts).isEqualTo(3);
+    assertThat(store.state.status).isEqualTo(EnrollmentStatus.EXPIRED);
   }
 
   @Test
@@ -95,11 +129,9 @@ class EnrollmentServiceTest {
     setUp();
     service.start(start());
     for (int attempt = 0; attempt < 3; attempt++) {
-      assertThat(service.verify(verify(wrongProof())))
-          .isEqualTo(EnrollmentVerificationResult.REJECTED);
+      assertThat(service.verify(verify(wrongProof()))).isEqualTo(REJECTED);
     }
-    assertThat(service.verify(verify(delivery.latest().proof())))
-        .isEqualTo(EnrollmentVerificationResult.REJECTED);
+    assertThat(service.verify(verify(delivery.latest().proof()))).isEqualTo(REJECTED);
   }
 
   @Test
@@ -107,10 +139,8 @@ class EnrollmentServiceTest {
     service.start(start());
     int before = store.verificationCalls;
     assertThat(service.verify(verify("bad"))).isEqualTo(EnrollmentVerificationResult.REJECTED);
-    assertThat(service.verify(verify("a".repeat(44))))
-        .isEqualTo(EnrollmentVerificationResult.REJECTED);
-    assertThat(service.verify(verify(resetToken())))
-        .isEqualTo(EnrollmentVerificationResult.REJECTED);
+    assertThat(service.verify(verify("a".repeat(44)))).isEqualTo(REJECTED);
+    assertThat(service.verify(verify(resetToken()))).isEqualTo(REJECTED);
     abuseControl = admission -> false;
     service = newService();
     assertThat(service.verify(verify(delivery.latest().proof())))
@@ -124,6 +154,18 @@ class EnrollmentServiceTest {
         .isEqualTo(EnrollmentVerificationResult.REJECTED);
     assertThat(store.verificationCalls).isEqualTo(before);
     assertThat(identity.receipts).isEmpty();
+  }
+
+  @Test
+  void rejectsTheUnconfiguredProofFormatBeforeStoreAccess() {
+    service.start(start());
+    String opaqueToken = delivery.latest().proof();
+    int before = store.verificationCalls;
+    service = newService(EnrollmentTestProperties.decimalCode("vigil-test", 3));
+    assertThat(service.verify(verify(opaqueToken))).isEqualTo(REJECTED);
+    service = newService(EnrollmentTestProperties.opaqueToken("vigil-test", 3));
+    assertThat(service.verify(verify("12345678"))).isEqualTo(EnrollmentVerificationResult.REJECTED);
+    assertThat(store.verificationCalls).isEqualTo(before);
   }
 
   @Test
@@ -269,12 +311,14 @@ class EnrollmentServiceTest {
 
   @Test
   void createsOneReceiptConcurrentlyAndRecoversTheSameReceipt() throws Exception {
+    service = newService(EnrollmentTestProperties.decimalCode("vigil-test", 3));
     service.start(start());
     String proof = delivery.latest().proof();
     ExecutorService executor = Executors.newFixedThreadPool(2);
     CountDownLatch ready = new CountDownLatch(2);
     CountDownLatch release = new CountDownLatch(1);
-    EnrollmentService secondNode = newService();
+    EnrollmentService secondNode =
+        newService(EnrollmentTestProperties.decimalCode("vigil-test", 3));
     executor.submit(() -> verifyWhenReleased(service, ready, release, proof));
     executor.submit(() -> verifyWhenReleased(secondNode, ready, release, proof));
     ready.await();
@@ -309,8 +353,12 @@ class EnrollmentServiceTest {
   }
 
   private EnrollmentService newService() {
+    return newService(EnrollmentTestProperties.opaqueToken("vigil-test", 3));
+  }
+
+  private EnrollmentService newService(EnrollmentProperties properties) {
     return new EnrollmentService(
-        new EnrollmentProperties(true, "vigil-test", null, null, 3, 2, null),
+        properties,
         value -> value.trim().toLowerCase(java.util.Locale.ROOT),
         identity,
         delivery,
@@ -342,6 +390,11 @@ class EnrollmentServiceTest {
 
   private static String wrongProof() {
     return Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]);
+  }
+
+  private static String differentCode(String proof) {
+    char first = proof.charAt(0) == '9' ? '0' : (char) (proof.charAt(0) + 1);
+    return first + proof.substring(1);
   }
 
   private static String domainDigest(String proof) {

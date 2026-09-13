@@ -7,7 +7,7 @@ supported until that combination passes the complete repository gate.
 
 | Component | Certified version |
 | --- | --- |
-| Vigil | 7.3.0 |
+| Vigil | 8.0.0 |
 | Java | 25 |
 | Spring Boot BOM | 4.1.1 |
 | Spring Framework MVC | 7.0.9 |

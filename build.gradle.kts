@@ -9,7 +9,7 @@ plugins {
 }
 
 group = "io.github.sequelcore"
-version = "7.3.0"
+version = "8.0.0"
 
 val hasSigningConfiguration = providers.gradleProperty("signingInMemoryKey").isPresent
     || providers.gradleProperty("signing.secretKeyRingFile").isPresent

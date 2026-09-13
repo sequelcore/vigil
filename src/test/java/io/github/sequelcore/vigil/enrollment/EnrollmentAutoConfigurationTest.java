@@ -73,6 +73,79 @@ class EnrollmentAutoConfigurationTest {
             });
   }
 
+  @Test
+  void rejectsDecimalCodesWithoutAValidDedicatedHmacKey() {
+    configuredPorts(
+            "vigil.enrollment.enabled=true",
+            "vigil.enrollment.audience=app",
+            "vigil.enrollment.proof-format=decimal-code")
+        .run(
+            context -> {
+              assertThat(context).hasFailed();
+              assertThat(context.getStartupFailure()).hasMessageContaining("code-hmac-key");
+            });
+  }
+
+  @Test
+  void rejectsNonCanonicalOrWrongLengthDecimalCodeHmacKeys() {
+    configuredPorts(
+            "vigil.enrollment.enabled=true",
+            "vigil.enrollment.audience=app",
+            "vigil.enrollment.proof-format=decimal-code",
+            "vigil.enrollment.code-hmac-key=short")
+        .run(
+            context -> {
+              assertThat(context).hasFailed();
+              assertThat(context.getStartupFailure())
+                  .hasRootCauseMessage(
+                      "vigil.enrollment.code-hmac-key must be canonical Base64URL for exactly 32 bytes when decimal codes are enabled");
+            });
+  }
+
+  @Test
+  void rejectsDecimalCodePolicyThatExpandsTheGuessingWindow() {
+    configuredPorts(
+            "vigil.enrollment.enabled=true",
+            "vigil.enrollment.audience=app",
+            "vigil.enrollment.proof-format=decimal-code",
+            "vigil.enrollment.code-hmac-key=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+            "vigil.enrollment.attempt-limit=6")
+        .run(
+            context -> {
+              assertThat(context).hasFailed();
+              assertThat(context.getStartupFailure())
+                  .hasRootCauseMessage(
+                      "vigil.enrollment.attempt-limit must be at most 5 for decimal codes");
+            });
+  }
+
+  @Test
+  void registersDecimalCodeModeWithItsBoundedPolicy() {
+    configuredPorts(
+            "vigil.enrollment.enabled=true",
+            "vigil.enrollment.audience=app",
+            "vigil.enrollment.proof-format=decimal-code",
+            "vigil.enrollment.code-hmac-key=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8")
+        .run(context -> assertThat(context).hasSingleBean(EnrollmentService.class));
+  }
+
+  @Test
+  void rejectsDecimalCodeTtlLongerThanFifteenMinutes() {
+    configuredPorts(
+            "vigil.enrollment.enabled=true",
+            "vigil.enrollment.audience=app",
+            "vigil.enrollment.proof-format=decimal-code",
+            "vigil.enrollment.code-hmac-key=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+            "vigil.enrollment.proof-ttl=16m")
+        .run(
+            context -> {
+              assertThat(context).hasFailed();
+              assertThat(context.getStartupFailure())
+                  .hasRootCauseMessage(
+                      "vigil.enrollment.proof-ttl must be at most 15m for decimal codes");
+            });
+  }
+
   private ApplicationContextRunner configuredPorts(String... properties) {
     return contextRunner
         .withPropertyValues(properties)

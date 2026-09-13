@@ -26,6 +26,13 @@ A repeated completion is only an idempotent acknowledgement. Hosts must bind cre
 to the receipt recorded during `applyVerifiedContact`, accept the first credential transaction
 only, and invalidate or keep untrusted any credential or session established before proof.
 
+Opaque enrollment tokens retain their domain-separated SHA-256 digest. Human-entered decimal codes
+use HMAC-SHA-256 with a dedicated 32-byte key and bind the format, canonical email, context
+ID/version, audience, and purpose into the MAC. This protects the small code space from offline
+enumeration after a store-only disclosure; it does not replace the five-attempt lifecycle budget or
+application-owned abuse controls. Every node must share the key, which must remain separate from
+JWT signing material and absent from state, logs, errors, and metrics.
+
 `VigilResetTokenService.validateAndConsume` invalidates a reset token after validation, but the current
 blacklist contract does not provide an atomic consume operation. Applications that can process the
 same reset token concurrently must serialize reset completion or enforce uniqueness in shared
