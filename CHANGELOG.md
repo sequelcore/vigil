@@ -7,6 +7,14 @@ include migration notes.
 
 ## Unreleased
 
+## 8.0.1 - 2026-09-13
+
+- Clarified the host-owned contact-enrollment contract: a pending password verifier may be
+  collected before verification only behind a server-protected, CSRF-bound ceremony validated
+  before proof verification. Missing continuity requires an independent restart without inherited
+  authority; credential activation remains post-`COMPLETED`, host-owned, and
+  first-write-wins. Vigil never links accounts, creates credentials, or issues sessions.
+
 ## 8.0.0 - 2026-09-12
 
 - Added opt-in eight-digit contact-enrollment codes through the closed

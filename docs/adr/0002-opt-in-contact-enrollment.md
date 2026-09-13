@@ -40,7 +40,12 @@ Verification is contact-only. It never accepts a password, creates a session/tok
 - Delivery happens outside a transaction. Retryable failures retain a pending proof; permanent failures may invalidate only the current generation; late outcomes must be conditional on generation.
 - Request-facing start/resend responses are deliberately generic and never contain a proof. Delivery adapters receive the proof and must avoid logging it or full email addresses.
 - This is an email-contact verification primitive, not hosted registration, password enrollment, account linking, or an authentication/authorization service.
-- Hosts use GET only to render a verification page and an explicit POST to consume a proof. They persist a fresh password only after `COMPLETED`; existing accounts are never auto-linked by Vigil. `recover` retries a durable pending receipt but cannot repair a lost/expired store record.
-- A repeated `COMPLETED` result is idempotent acknowledgement, not renewed authority. Host password
-  completion is first-write-wins by the receipt recorded in the identity transaction, so replay or
-  concurrent requests cannot replace a credential or mint another session.
+- Hosts consume an opaque proof through an explicit POST after any GET interstitial; decimal codes
+  use a host form and explicit POST. A host with pending credential state validates its protected
+  ceremony before it calls `verify`; form order and that ceremony are defined by
+  [ADR 0004](0004-host-owned-pending-password-state.md).
+  Existing accounts are never auto-linked by Vigil. `recover` retries a durable pending receipt but
+  cannot repair a lost/expired store record.
+- A repeated `COMPLETED` result is idempotent acknowledgement, not renewed authority. A host that
+  supports credential finalization may record a receipt-bound permission and consumes it
+  first-write-wins only after `COMPLETED`, as specified by ADR 0004.

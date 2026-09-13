@@ -5,9 +5,13 @@ package io.github.sequelcore.vigil.enrollment;
  *
  * <p>Implementations must make {@link #applyVerifiedContact(EnrollmentVerificationReceipt)}
  * transactional and idempotent by receipt ID, and recheck the context binding and version before
- * changing state. Any later credential-enrollment permission must be recorded with that receipt and
- * consumed first-write-wins so replay cannot replace a credential or create another session. It is
- * intentionally not a user lookup or auto-linking API.
+ * changing state. A credential-finalizing host may record a receipt-bound finalization permission,
+ * but this method neither creates nor activates a credential, session, or account link. A host with
+ * a pending password verifier must validate its registration ceremony before calling Vigil and
+ * revalidate it before consuming that permission first-write-wins after Vigil acknowledges
+ * completion. An invalid ceremony must not advance verification or credential activation;
+ * pending-state retirement requires authorized host action or expiry. It is intentionally not a
+ * user lookup or auto-linking API.
  */
 @FunctionalInterface
 public interface EnrollmentIdentityPort {
