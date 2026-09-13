@@ -7,6 +7,22 @@ include migration notes.
 
 ## Unreleased
 
+## 8.0.0 - 2026-09-12
+
+- Added opt-in eight-digit contact-enrollment codes through the closed
+  `EnrollmentProofFormat.DECIMAL_CODE` configuration while keeping opaque tokens as the default.
+  Codes use a dedicated, binding-aware HMAC-SHA-256 key, a maximum 15-minute TTL, and at most five
+  lifecycle-wide attempts; delivery providers receive the selected format without owning proof
+  policy. Existing stores require no schema or command changes.
+
+Migration: direct `EnrollmentProperties` construction must supply `proofFormat` and
+`codeHmacKey`; direct `EnrollmentDelivery` construction must supply `proofFormat`. No compatibility
+constructors are retained. The configured format is the only accepted proof representation, so a
+format or code-key change invalidates pending proofs. A resend may rotate them only within the
+existing cooldown, resend, attempt, and lifetime limits; otherwise the host must follow its normal
+lifecycle expiry or retirement policy without resetting budgets. Applications using `decimal-code`
+must configure a canonical 32-byte Base64URL key shared by every node.
+
 ## 7.3.0 - 2026-09-12
 
 - Added opt-in, route-free self-service contact enrollment with application-owned canonicalization,

@@ -21,6 +21,7 @@ The built-in Caffeine implementations are single-node defaults.
 | blacklist and refresh rotation | provide a shared `VigilBlacklistBackend` |
 | password reset | provide a shared blacklist backend and serialize concurrent completion for the same reset token |
 | step-up authorization | provide a shared `StepUpStore` with atomic challenge/proof consumption |
+| contact enrollment | provide a shared atomic `EnrollmentStore`; when using decimal codes, share the dedicated code HMAC key across every node |
 | failed-attempt protection | place a shared rate limiter or equivalent protection in front of the application when node-local lockout is insufficient |
 
 Do not use eventually consistent state for one-time step-up proof consumption. A proof must be
@@ -36,5 +37,9 @@ Before deploying a configuration change:
 3. For RS256, fetch and validate the JWKS endpoint from a verifier environment.
 4. For tenant-aware routes, test matching and mismatched tenant headers.
 5. For step-up, test success, invalid credential, expired proof, binding mismatch, and concurrent replay.
+6. For contact enrollment, test the configured proof format, resend rotation, attempt exhaustion,
+   and receipt recovery. Coordinate format and decimal-code key changes. Proofs issued under the
+   prior configuration become invalid; resend only within existing lifecycle limits, otherwise
+   follow the host lifecycle expiry or retirement policy without resetting budgets.
 
 Run the repository verification commands in [testing and verification](../development/testing.md) before a release.

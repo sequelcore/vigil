@@ -94,6 +94,8 @@ vigil:
   enrollment:
     enabled: false
     audience: enrollment-api # required only when enabled; trusted by configuration, never a request field
+    proof-format: opaque-token # or decimal-code
+    code-hmac-key: ${ENROLLMENT_CODE_HMAC_KEY} # required only for decimal-code
     proof-ttl: 15m
     total-lifetime: 24h
     attempt-limit: 5
@@ -120,9 +122,15 @@ Spring Boot duration syntax is accepted for duration properties, for example `30
 | `step-up.pin.max-length` | Must be at least `min-length` and at most `128`; otherwise normalizes to `12` |
 | `step-up.pin.bcrypt-strength` | BCrypt cost `4`–`31`; invalid values normalize to `12` |
 | `enrollment.audience` | Required and non-blank when `enrollment.enabled=true`; fixed trusted proof audience |
+| `enrollment.proof-format` | `opaque-token` by default; `decimal-code` opts into eight-digit manual entry |
+| `enrollment.code-hmac-key` | Canonical Base64URL encoding of exactly 32 bytes; required for `decimal-code` and never derived from JWT keys |
 | `enrollment.proof-ttl`, `enrollment.total-lifetime` | Positive; total lifetime must be at least proof TTL |
 | `enrollment.attempt-limit`, `enrollment.resend-limit` | Attempt limit positive; resend limit non-negative |
 | `enrollment.resend-cooldown` | Cannot be negative |
+
+For `decimal-code`, `proof-ttl` cannot exceed 15 minutes and `attempt-limit` cannot exceed five.
+Attempts remain cumulative across resend. The configured proof format governs generation and
+verification; changing it invalidates pending proofs issued under the prior format.
 
 - Invalid JWT signing configuration fails at application startup.
 - `secure: true` requires HTTPS for browser clients.

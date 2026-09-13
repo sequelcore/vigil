@@ -8,7 +8,10 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.sql.Timestamp;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -25,14 +28,16 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 /**
  * Test-only PostgreSQL contract fixture, not a production store or published schema.
  *
- * <p>It proves receipt creation with independent JDBC adapter instances and connections. Hosts must
- * still validate their own store implementation and operational schema.
+ * <p>Hosts must still validate their own store implementation and operational schema.
  */
 @Testcontainers(disabledWithoutDocker = true)
 class PostgresEnrollmentStoreContractTest {
   private static final String EMAIL = "person@example.test";
   private static final String CONTEXT = "postgres-contract";
   private static final String VERSION = "1";
+  private static final String AUDIENCE = "postgres-contract";
+  private static final String PURPOSE = "contact-enrollment";
+  private static final Instant NOW = Instant.parse("2026-09-12T10:00:00Z");
 
   @Container
   static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
@@ -59,6 +64,12 @@ class PostgresEnrollmentStoreContractTest {
             generation BIGINT NOT NULL,
             proof_digest TEXT NOT NULL,
             status TEXT NOT NULL,
+            started_at TIMESTAMPTZ NOT NULL,
+            total_expires_at TIMESTAMPTZ NOT NULL,
+            proof_expires_at TIMESTAMPTZ NOT NULL,
+            last_sent_at TIMESTAMPTZ NOT NULL,
+            resends INTEGER NOT NULL,
+            attempts INTEGER NOT NULL,
             receipt_id UUID,
             verified_at TIMESTAMPTZ,
             PRIMARY KEY (context_id, audience, purpose)
@@ -69,50 +80,42 @@ class PostgresEnrollmentStoreContractTest {
 
   @Test
   void createsOneReceiptAcrossIndependentJdbcAdaptersAndConnections() throws Exception {
-    JdbcContractStore firstAdapter = new JdbcContractStore();
-    JdbcContractStore secondAdapter = new JdbcContractStore();
-    EnrollmentService firstNode = service(firstAdapter);
-    EnrollmentService secondNode = service(secondAdapter);
+    EnrollmentService firstNode = service(store());
+    EnrollmentService secondNode = service(store());
     firstNode.start(new EnrollmentStartRequest(EMAIL, CONTEXT, VERSION));
-    String proof = delivery.proof.get();
-    assertThat(proof).isNotBlank();
+    String proof = delivery.value.get().proof();
 
     ExecutorService executor = Executors.newFixedThreadPool(2);
-    CountDownLatch ready = new CountDownLatch(2);
-    CountDownLatch release = new CountDownLatch(1);
-    Future<EnrollmentVerificationResult> first =
-        executor.submit(() -> verifyAfterRelease(firstNode, proof, ready, release));
-    Future<EnrollmentVerificationResult> second =
-        executor.submit(() -> verifyAfterRelease(secondNode, proof, ready, release));
-    ready.await();
-    release.countDown();
-    assertThat(first.get()).isEqualTo(EnrollmentVerificationResult.COMPLETED);
-    assertThat(second.get()).isEqualTo(EnrollmentVerificationResult.COMPLETED);
-    executor.shutdown();
+    try {
+      CountDownLatch ready = new CountDownLatch(2);
+      CountDownLatch release = new CountDownLatch(1);
+      Future<EnrollmentVerificationResult> first =
+          executor.submit(() -> verifyAfterRelease(firstNode, proof, ready, release));
+      Future<EnrollmentVerificationResult> second =
+          executor.submit(() -> verifyAfterRelease(secondNode, proof, ready, release));
+      ready.await();
+      release.countDown();
+      assertThat(first.get()).isEqualTo(EnrollmentVerificationResult.COMPLETED);
+      assertThat(second.get()).isEqualTo(EnrollmentVerificationResult.COMPLETED);
+    } finally {
+      executor.shutdownNow();
+    }
 
     assertThat(identity.appliedReceiptIds).hasSize(1);
-    try (Connection connection = connection();
-        PreparedStatement statement =
-            connection.prepareStatement("SELECT receipt_id, status FROM enrollment_contract");
-        ResultSet result = statement.executeQuery()) {
-      assertThat(result.next()).isTrue();
-      assertThat(result.getObject("receipt_id", UUID.class))
-          .isEqualTo(identity.appliedReceiptIds.iterator().next());
-      assertThat(result.getString("status")).isEqualTo(EnrollmentStatus.COMPLETED.name());
-    }
+    assertThat(storedState().status()).isEqualTo(EnrollmentStatus.COMPLETED);
   }
 
   @Test
   void changedEmailAndContextVersionAtomicallySupersedeThePreviousProof() throws Exception {
-    EnrollmentService firstNode = service(new JdbcContractStore());
-    EnrollmentService secondNode = service(new JdbcContractStore());
+    EnrollmentService firstNode = service(store());
+    EnrollmentService secondNode = service(store());
     firstNode.start(new EnrollmentStartRequest(EMAIL, CONTEXT, VERSION));
-    String previousProof = delivery.proof.get();
+    String previousProof = delivery.value.get().proof();
 
     String changedEmail = "changed@example.test";
     String changedVersion = "2";
     secondNode.start(new EnrollmentStartRequest(changedEmail, CONTEXT, changedVersion));
-    String currentProof = delivery.proof.get();
+    String currentProof = delivery.value.get().proof();
 
     assertThat(
             firstNode.verify(
@@ -136,6 +139,128 @@ class PostgresEnrollmentStoreContractTest {
     }
   }
 
+  @Test
+  void resendRotatesTheProofWithoutResettingAttemptsOrTotalLifetime() {
+    EnrollmentStore store = store();
+    EnrollmentProofCodec codec = codec();
+    Instant totalExpiresAt = NOW.plus(Duration.ofHours(1));
+    store.start(startCommand(codec, "11111111", NOW, totalExpiresAt));
+    assertThat(store.createVerificationReceipt(verifyCommand(codec, "99999999", NOW, 3)).kind())
+        .isEqualTo(EnrollmentVerificationOutcome.Kind.REJECTED);
+
+    Instant resendAt = NOW.plusSeconds(30);
+    EnrollmentStartOutcome resent =
+        store.resend(startCommand(codec, "22222222", resendAt, totalExpiresAt));
+    assertThat(resent.created()).isTrue();
+    assertThat(resent.generation()).isEqualTo(2);
+    assertThat(
+            store.createVerificationReceipt(verifyCommand(codec, "11111111", resendAt, 3)).kind())
+        .isEqualTo(EnrollmentVerificationOutcome.Kind.REJECTED);
+    assertThat(
+            store.createVerificationReceipt(verifyCommand(codec, "88888888", resendAt, 3)).kind())
+        .isEqualTo(EnrollmentVerificationOutcome.Kind.REJECTED);
+    assertThat(
+            store.createVerificationReceipt(verifyCommand(codec, "22222222", resendAt, 3)).kind())
+        .isEqualTo(EnrollmentVerificationOutcome.Kind.REJECTED);
+
+    StoredState state = storedState();
+    assertThat(state.generation()).isEqualTo(2);
+    assertThat(state.attempts()).isEqualTo(3);
+    assertThat(state.status()).isEqualTo(EnrollmentStatus.EXPIRED);
+    assertThat(state.totalExpiresAt()).isEqualTo(totalExpiresAt);
+  }
+
+  @Test
+  void exactProofExpiryBoundaryRejectsAndExpiresTheEnrollment() {
+    EnrollmentStore store = store();
+    EnrollmentProofCodec codec = codec();
+    store.start(startCommand(codec, "11111111", NOW, NOW.plus(Duration.ofHours(1))));
+
+    EnrollmentVerificationOutcome outcome =
+        store.createVerificationReceipt(
+            verifyCommand(codec, "11111111", NOW.plus(Duration.ofMinutes(15)), 3));
+
+    assertThat(outcome.kind()).isEqualTo(EnrollmentVerificationOutcome.Kind.REJECTED);
+    assertThat(storedState().status()).isEqualTo(EnrollmentStatus.EXPIRED);
+  }
+
+  @Test
+  void concurrentWrongAttemptsAtomicallyExhaustTheSharedBudget() throws Exception {
+    EnrollmentProofCodec codec = codec();
+    store().start(startCommand(codec, "11111111", NOW, NOW.plus(Duration.ofHours(1))));
+    EnrollmentVerificationCommand firstWrong = verifyCommand(codec, "22222222", NOW, 2);
+    EnrollmentVerificationCommand secondWrong = verifyCommand(codec, "33333333", NOW, 2);
+
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    try {
+      CountDownLatch ready = new CountDownLatch(2);
+      CountDownLatch release = new CountDownLatch(1);
+      Future<EnrollmentVerificationOutcome> first =
+          executor.submit(() -> verifyAfterRelease(store(), firstWrong, ready, release));
+      Future<EnrollmentVerificationOutcome> second =
+          executor.submit(() -> verifyAfterRelease(store(), secondWrong, ready, release));
+      ready.await();
+      release.countDown();
+      assertThat(first.get().kind()).isEqualTo(EnrollmentVerificationOutcome.Kind.REJECTED);
+      assertThat(second.get().kind()).isEqualTo(EnrollmentVerificationOutcome.Kind.REJECTED);
+    } finally {
+      executor.shutdownNow();
+    }
+
+    StoredState state = storedState();
+    assertThat(state.attempts()).isEqualTo(2);
+    assertThat(state.status()).isEqualTo(EnrollmentStatus.EXPIRED);
+    assertThat(store().createVerificationReceipt(verifyCommand(codec, "11111111", NOW, 2)).kind())
+        .isEqualTo(EnrollmentVerificationOutcome.Kind.REJECTED);
+  }
+
+  @Test
+  void concurrentResendAndVerifyProduceOneSerializedLifecycle() throws Exception {
+    EnrollmentProofCodec codec = codec();
+    Instant totalExpiresAt = NOW.plus(Duration.ofHours(1));
+    store().start(startCommand(codec, "11111111", NOW, totalExpiresAt));
+    EnrollmentStartCommand resend =
+        startCommand(codec, "22222222", NOW.plusSeconds(30), totalExpiresAt);
+    EnrollmentVerificationCommand verify = verifyCommand(codec, "11111111", NOW.plusSeconds(30), 3);
+
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    EnrollmentStartOutcome resendOutcome;
+    EnrollmentVerificationOutcome verifyOutcome;
+    try {
+      CountDownLatch ready = new CountDownLatch(2);
+      CountDownLatch release = new CountDownLatch(1);
+      Future<EnrollmentStartOutcome> resendFuture =
+          executor.submit(
+              () -> {
+                ready.countDown();
+                release.await();
+                return store().resend(resend);
+              });
+      Future<EnrollmentVerificationOutcome> verifyFuture =
+          executor.submit(() -> verifyAfterRelease(store(), verify, ready, release));
+      ready.await();
+      release.countDown();
+      resendOutcome = resendFuture.get();
+      verifyOutcome = verifyFuture.get();
+    } finally {
+      executor.shutdownNow();
+    }
+
+    StoredState state = storedState();
+    boolean verificationWon =
+        !resendOutcome.created()
+            && verifyOutcome.kind() == EnrollmentVerificationOutcome.Kind.CREATED_RECEIPT
+            && state.generation() == 1
+            && state.status() == EnrollmentStatus.VERIFIED_PENDING_APPLY;
+    boolean resendWon =
+        resendOutcome.created()
+            && verifyOutcome.kind() == EnrollmentVerificationOutcome.Kind.REJECTED
+            && state.generation() == 2
+            && state.attempts() == 1
+            && state.status() == EnrollmentStatus.PENDING;
+    assertThat(verificationWon || resendWon).isTrue();
+  }
+
   private EnrollmentVerificationResult verifyAfterRelease(
       EnrollmentService service, String proof, CountDownLatch ready, CountDownLatch release)
       throws InterruptedException {
@@ -144,14 +269,80 @@ class PostgresEnrollmentStoreContractTest {
     return service.verify(new EnrollmentVerificationRequest(EMAIL, CONTEXT, VERSION, proof));
   }
 
+  private static EnrollmentVerificationOutcome verifyAfterRelease(
+      EnrollmentStore store,
+      EnrollmentVerificationCommand command,
+      CountDownLatch ready,
+      CountDownLatch release)
+      throws InterruptedException {
+    ready.countDown();
+    release.await();
+    return store.createVerificationReceipt(command);
+  }
+
   private EnrollmentService service(EnrollmentStore store) {
     return new EnrollmentService(
-        new EnrollmentProperties(true, "postgres-contract", null, null, 3, 2, null),
+        EnrollmentTestProperties.decimalCode(AUDIENCE, 3),
         value -> value,
         identity,
         delivery,
         admission -> true,
-        store);
+        store,
+        Clock.fixed(NOW, ZoneOffset.UTC));
+  }
+
+  private static EnrollmentStore store() {
+    return new PostgresEnrollmentStoreFixture(PostgresEnrollmentStoreContractTest::connection);
+  }
+
+  private static EnrollmentProofCodec codec() {
+    return new EnrollmentProofCodec(EnrollmentTestProperties.decimalCode(AUDIENCE, 3));
+  }
+
+  private static EnrollmentStartCommand startCommand(
+      EnrollmentProofCodec codec, String proof, Instant now, Instant totalExpiresAt) {
+    return new EnrollmentStartCommand(
+        EMAIL,
+        CONTEXT,
+        VERSION,
+        AUDIENCE,
+        PURPOSE,
+        codec.digest(proof, EMAIL, CONTEXT, VERSION, AUDIENCE, PURPOSE),
+        now,
+        now.plus(Duration.ofMinutes(15)),
+        totalExpiresAt,
+        2,
+        Duration.ZERO);
+  }
+
+  private static EnrollmentVerificationCommand verifyCommand(
+      EnrollmentProofCodec codec, String proof, Instant now, int attemptLimit) {
+    return new EnrollmentVerificationCommand(
+        EMAIL,
+        CONTEXT,
+        VERSION,
+        AUDIENCE,
+        PURPOSE,
+        codec.digest(proof, EMAIL, CONTEXT, VERSION, AUDIENCE, PURPOSE),
+        now,
+        attemptLimit);
+  }
+
+  private static StoredState storedState() {
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                "SELECT generation, attempts, status, total_expires_at FROM enrollment_contract");
+        ResultSet result = statement.executeQuery()) {
+      assertThat(result.next()).isTrue();
+      return new StoredState(
+          result.getLong("generation"),
+          result.getInt("attempts"),
+          EnrollmentStatus.valueOf(result.getString("status")),
+          result.getTimestamp("total_expires_at").toInstant());
+    } catch (SQLException exception) {
+      throw new IllegalStateException("test contract state read failed", exception);
+    }
   }
 
   private static Connection connection() throws SQLException {
@@ -159,12 +350,15 @@ class PostgresEnrollmentStoreContractTest {
         POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
   }
 
+  private record StoredState(
+      long generation, int attempts, EnrollmentStatus status, Instant totalExpiresAt) {}
+
   private static final class CapturingDelivery implements EnrollmentDeliveryPort {
-    private final AtomicReference<String> proof = new AtomicReference<>();
+    private final AtomicReference<EnrollmentDelivery> value = new AtomicReference<>();
 
     @Override
     public DeliveryOutcome deliver(EnrollmentDelivery delivery) {
-      proof.set(delivery.proof());
+      value.set(delivery);
       return DeliveryOutcome.ACCEPTED;
     }
   }
@@ -176,212 +370,6 @@ class PostgresEnrollmentStoreContractTest {
     public ApplyOutcome applyVerifiedContact(EnrollmentVerificationReceipt receipt) {
       appliedReceiptIds.add(receipt.receiptId());
       return ApplyOutcome.APPLIED;
-    }
-  }
-
-  private static final class JdbcContractStore implements EnrollmentStore {
-    @Override
-    public EnrollmentStartOutcome start(EnrollmentStartCommand command) {
-      UUID lifecycleId = UUID.randomUUID();
-      try (Connection connection = connection();
-          PreparedStatement statement =
-              connection.prepareStatement(
-                  """
-                  INSERT INTO enrollment_contract
-                    (canonical_email, context_id, context_version, audience, purpose, lifecycle_id,
-                     generation, proof_digest, status)
-                  VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
-                  ON CONFLICT (context_id, audience, purpose) DO UPDATE SET
-                    canonical_email = EXCLUDED.canonical_email,
-                    context_version = EXCLUDED.context_version,
-                    lifecycle_id = EXCLUDED.lifecycle_id,
-                    generation = EXCLUDED.generation,
-                    proof_digest = EXCLUDED.proof_digest,
-                    status = EXCLUDED.status,
-                    receipt_id = NULL,
-                    verified_at = NULL
-                  WHERE enrollment_contract.canonical_email <> EXCLUDED.canonical_email
-                    OR enrollment_contract.context_version <> EXCLUDED.context_version
-                    OR enrollment_contract.status NOT IN (?, ?)
-                  RETURNING lifecycle_id, generation
-                  """)) {
-        bindKey(statement, command);
-        statement.setObject(6, lifecycleId);
-        statement.setString(7, command.proofDigest());
-        statement.setString(8, EnrollmentStatus.PENDING.name());
-        statement.setString(9, EnrollmentStatus.PENDING.name());
-        statement.setString(10, EnrollmentStatus.VERIFIED_PENDING_APPLY.name());
-        try (ResultSet result = statement.executeQuery()) {
-          return result.next()
-              ? new EnrollmentStartOutcome(
-                  true,
-                  result.getObject("lifecycle_id", UUID.class),
-                  result.getLong("generation"),
-                  command.proofExpiresAt())
-              : EnrollmentStartOutcome.notCreated();
-        }
-      } catch (SQLException exception) {
-        throw new IllegalStateException("test contract store failure", exception);
-      }
-    }
-
-    @Override
-    public EnrollmentStartOutcome resend(EnrollmentStartCommand command) {
-      return EnrollmentStartOutcome.notCreated();
-    }
-
-    @Override
-    public EnrollmentVerificationOutcome createVerificationReceipt(
-        EnrollmentVerificationCommand command) {
-      UUID receiptId = UUID.randomUUID();
-      try (Connection connection = connection()) {
-        connection.setAutoCommit(false);
-        try {
-          try (PreparedStatement update =
-              connection.prepareStatement(
-                  """
-                  UPDATE enrollment_contract
-                  SET status = ?, receipt_id = ?, verified_at = ?
-                  WHERE canonical_email = ? AND context_id = ? AND context_version = ?
-                    AND audience = ? AND purpose = ? AND status = ? AND proof_digest = ?
-                  RETURNING lifecycle_id, generation
-                  """)) {
-            update.setString(1, EnrollmentStatus.VERIFIED_PENDING_APPLY.name());
-            update.setObject(2, receiptId);
-            update.setTimestamp(3, Timestamp.from(command.now()));
-            bindKey(update, command, 4);
-            update.setString(9, EnrollmentStatus.PENDING.name());
-            update.setString(10, command.proofDigest());
-            try (ResultSet updated = update.executeQuery()) {
-              if (updated.next()) {
-                EnrollmentVerificationReceipt receipt =
-                    new EnrollmentVerificationReceipt(
-                        receiptId,
-                        command.canonicalEmail(),
-                        command.contextId(),
-                        command.contextVersion(),
-                        command.audience(),
-                        command.purpose(),
-                        updated.getObject("lifecycle_id", UUID.class),
-                        updated.getLong("generation"),
-                        command.now());
-                connection.commit();
-                return new EnrollmentVerificationOutcome(
-                    EnrollmentVerificationOutcome.Kind.CREATED_RECEIPT, receipt);
-              }
-            }
-          }
-          EnrollmentVerificationOutcome outcome = existingOutcome(connection, command);
-          connection.commit();
-          return outcome;
-        } catch (SQLException exception) {
-          connection.rollback();
-          throw exception;
-        }
-      } catch (SQLException exception) {
-        throw new IllegalStateException("test contract store failure", exception);
-      }
-    }
-
-    @Override
-    public EnrollmentVerificationReceipt recoverVerificationReceipt(
-        EnrollmentRecoveryCommand command) {
-      throw new UnsupportedOperationException("not needed by this contract fixture");
-    }
-
-    @Override
-    public void recordDeliveryOutcome(EnrollmentDeliveryOutcomeCommand command) {}
-
-    @Override
-    public void acknowledgeCompletion(EnrollmentVerificationReceipt receipt) {
-      settle(receipt, EnrollmentStatus.COMPLETED);
-    }
-
-    @Override
-    public void rejectCompletion(EnrollmentVerificationReceipt receipt) {
-      settle(receipt, EnrollmentStatus.REJECTED);
-    }
-
-    private EnrollmentVerificationOutcome existingOutcome(
-        Connection connection, EnrollmentVerificationCommand command) throws SQLException {
-      try (PreparedStatement select =
-          connection.prepareStatement(
-              """
-              SELECT lifecycle_id, generation, proof_digest, status, receipt_id, verified_at
-              FROM enrollment_contract
-              WHERE canonical_email = ? AND context_id = ? AND context_version = ?
-                AND audience = ? AND purpose = ?
-              """)) {
-        bindKey(select, command);
-        try (ResultSet result = select.executeQuery()) {
-          if (!result.next() || !command.proofDigest().equals(result.getString("proof_digest"))) {
-            return EnrollmentVerificationOutcome.rejected();
-          }
-          EnrollmentStatus status = EnrollmentStatus.valueOf(result.getString("status"));
-          if (status == EnrollmentStatus.COMPLETED) {
-            return new EnrollmentVerificationOutcome(
-                EnrollmentVerificationOutcome.Kind.COMPLETED, null);
-          }
-          if (status != EnrollmentStatus.VERIFIED_PENDING_APPLY) {
-            return EnrollmentVerificationOutcome.rejected();
-          }
-          EnrollmentVerificationReceipt receipt =
-              new EnrollmentVerificationReceipt(
-                  result.getObject("receipt_id", UUID.class),
-                  command.canonicalEmail(),
-                  command.contextId(),
-                  command.contextVersion(),
-                  command.audience(),
-                  command.purpose(),
-                  result.getObject("lifecycle_id", UUID.class),
-                  result.getLong("generation"),
-                  result.getTimestamp("verified_at").toInstant());
-          return new EnrollmentVerificationOutcome(
-              EnrollmentVerificationOutcome.Kind.EXISTING_RECEIPT, receipt);
-        }
-      }
-    }
-
-    private void settle(EnrollmentVerificationReceipt receipt, EnrollmentStatus target) {
-      try (Connection connection = connection();
-          PreparedStatement statement =
-              connection.prepareStatement(
-                  """
-                  UPDATE enrollment_contract SET status = ?
-                  WHERE lifecycle_id = ? AND receipt_id = ? AND status = ?
-                  """)) {
-        statement.setString(1, target.name());
-        statement.setObject(2, receipt.lifecycleId());
-        statement.setObject(3, receipt.receiptId());
-        statement.setString(4, EnrollmentStatus.VERIFIED_PENDING_APPLY.name());
-        statement.executeUpdate();
-      } catch (SQLException exception) {
-        throw new IllegalStateException("test contract store failure", exception);
-      }
-    }
-
-    private static void bindKey(PreparedStatement statement, EnrollmentStartCommand command)
-        throws SQLException {
-      statement.setString(1, command.canonicalEmail());
-      statement.setString(2, command.contextId());
-      statement.setString(3, command.contextVersion());
-      statement.setString(4, command.audience());
-      statement.setString(5, command.purpose());
-    }
-
-    private static void bindKey(PreparedStatement statement, EnrollmentVerificationCommand command)
-        throws SQLException {
-      bindKey(statement, command, 1);
-    }
-
-    private static void bindKey(
-        PreparedStatement statement, EnrollmentVerificationCommand command, int offset)
-        throws SQLException {
-      statement.setString(offset, command.canonicalEmail());
-      statement.setString(offset + 1, command.contextId());
-      statement.setString(offset + 2, command.contextVersion());
-      statement.setString(offset + 3, command.audience());
-      statement.setString(offset + 4, command.purpose());
     }
   }
 }

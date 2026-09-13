@@ -1,12 +1,7 @@
 package io.github.sequelcore.vigil.enrollment;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.Base64;
 
 /**
  * Contact-only enrollment proof lifecycle orchestration.
@@ -17,11 +12,8 @@ import java.util.Base64;
  */
 public final class EnrollmentService {
   private static final String ENROLLMENT_PURPOSE = "contact-enrollment";
-  private static final byte[] PROOF_DIGEST_DOMAIN =
-      "vigil.enrollment.proof.v1\u0000".getBytes(StandardCharsets.UTF_8);
-  private static final SecureRandom RANDOM = new SecureRandom();
-
   private final EnrollmentProperties properties;
+  private final EnrollmentProofCodec proofCodec;
   private final EmailCanonicalizer canonicalizer;
   private final EnrollmentIdentityPort identityPort;
   private final EnrollmentDeliveryPort deliveryPort;
@@ -55,6 +47,7 @@ public final class EnrollmentService {
       EnrollmentStore store,
       Clock clock) {
     this.properties = properties.validatedForEnabledUse();
+    this.proofCodec = new EnrollmentProofCodec(this.properties);
     this.canonicalizer = canonicalizer;
     this.identityPort = identityPort;
     this.deliveryPort = deliveryPort;
@@ -93,8 +86,18 @@ public final class EnrollmentService {
             canonicalEmail,
             request.contextId(),
             request.contextVersion(),
-            EnrollmentOperation.VERIFY)
-        || !isCanonicalProof(request.proof())) {
+            EnrollmentOperation.VERIFY)) {
+      return EnrollmentVerificationResult.REJECTED;
+    }
+    String proofDigest =
+        proofCodec.digest(
+            request.proof(),
+            canonicalEmail,
+            request.contextId(),
+            request.contextVersion(),
+            properties.audience(),
+            ENROLLMENT_PURPOSE);
+    if (proofDigest == null) {
       return EnrollmentVerificationResult.REJECTED;
     }
     EnrollmentVerificationOutcome outcome;
@@ -107,7 +110,7 @@ public final class EnrollmentService {
                   request.contextVersion(),
                   properties.audience(),
                   ENROLLMENT_PURPOSE,
-                  digest(request.proof()),
+                  proofDigest,
                   Instant.now(clock),
                   properties.attemptLimit()));
     } catch (RuntimeException exception) {
@@ -156,7 +159,7 @@ public final class EnrollmentService {
         || !admitted(canonicalEmail, request.contextId(), request.contextVersion(), operation)) {
       return;
     }
-    String proof = randomProof();
+    String proof = proofCodec.generate();
     Instant now = Instant.now(clock);
     EnrollmentStartCommand command =
         new EnrollmentStartCommand(
@@ -165,7 +168,13 @@ public final class EnrollmentService {
             request.contextVersion(),
             properties.audience(),
             ENROLLMENT_PURPOSE,
-            digest(proof),
+            proofCodec.digest(
+                proof,
+                canonicalEmail,
+                request.contextId(),
+                request.contextVersion(),
+                properties.audience(),
+                ENROLLMENT_PURPOSE),
             now,
             now.plus(properties.proofTtl()),
             operation == EnrollmentOperation.START ? now.plus(properties.totalLifetime()) : null,
@@ -217,6 +226,7 @@ public final class EnrollmentService {
                   properties.audience(),
                   ENROLLMENT_PURPOSE,
                   outcome,
+                  properties.proofFormat(),
                   proof));
       if (deliveryOutcome == null) {
         deliveryOutcome = EnrollmentDeliveryPort.DeliveryOutcome.RETRYABLE_FAILURE;
@@ -262,40 +272,10 @@ public final class EnrollmentService {
     }
   }
 
-  private static String randomProof() {
-    byte[] bytes = new byte[32];
-    RANDOM.nextBytes(bytes);
-    return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-  }
-
-  private static boolean isCanonicalProof(String proof) {
-    if (proof == null || proof.length() != 43) {
-      return false;
-    }
-    try {
-      byte[] bytes = Base64.getUrlDecoder().decode(proof);
-      return bytes.length == 32
-          && Base64.getUrlEncoder().withoutPadding().encodeToString(bytes).equals(proof);
-    } catch (IllegalArgumentException exception) {
-      return false;
-    }
-  }
-
   private static boolean hasBinding(String contextId, String contextVersion) {
     return contextId != null
         && !contextId.isBlank()
         && contextVersion != null
         && !contextVersion.isBlank();
-  }
-
-  private static String digest(String proof) {
-    try {
-      MessageDigest digest = MessageDigest.getInstance("SHA-256");
-      digest.update(PROOF_DIGEST_DOMAIN);
-      digest.update((proof == null ? "" : proof).getBytes(StandardCharsets.UTF_8));
-      return Base64.getUrlEncoder().withoutPadding().encodeToString(digest.digest());
-    } catch (NoSuchAlgorithmException exception) {
-      throw new IllegalStateException("Required digest algorithm unavailable", exception);
-    }
   }
 }

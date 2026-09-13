@@ -245,8 +245,7 @@ class EnrollmentHttpFixtureTest {
 
     @Bean
     EnrollmentService enrollmentService(FixtureHost host) {
-      EnrollmentProperties properties =
-          new EnrollmentProperties(true, "host-enrollment", null, null, 3, 2, null);
+      EnrollmentProperties properties = EnrollmentTestProperties.opaqueToken("host-enrollment", 3);
       return new EnrollmentService(properties, host, host, host, host, host);
     }
   }
