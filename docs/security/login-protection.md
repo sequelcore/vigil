@@ -40,6 +40,7 @@ The design does not rely on guidance from Auth0, Google or Firebase, or on Sprin
 8. Out of scope, for the application or front door: per-IP and global rate limits, CAPTCHA, MFA, lockout notification, recovery routes.
 
 ## Limitations
+
 - **Concurrency.** Parallel requests can pass the lock check together, so up to `maxFailures - 1` plus the number of concurrent requests guesses precede the first lock.
 - **Eviction.** A flood of distinct identifiers can evict counters from the bounded default store.
 - **Timing floor.** Every verified attempt takes at least a floor calibrated from the encoder's own dummy verification, so stored hashes cheaper than the encoder's default (older work factors) are not faster than unknown users. The floor is a short wait per attempt, bounded by one dummy-verification time.

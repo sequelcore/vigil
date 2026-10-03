@@ -7,7 +7,7 @@ include migration notes.
 
 ## Unreleased
 
-### Breaking changes (next release: 9.0.0)
+## 9.0.0 - 2026-10-03
 
 - Added `PasswordLoginGuard`, a route-free password-login guard for application-owned login
   routes: per-identifier lockout with doubling backoff, immediate rejection of locked identifiers,
@@ -26,7 +26,8 @@ include migration notes.
   lasts `base-lock` and doubles on each further failure up to `max-lock`; failures are forgotten
   after `failure-window`. Failures during a lock are not counted.
 
-### Migration
+Migration: the removed API has no compatibility path. Each removed type, method, and property maps
+to its replacement as follows.
 
 | Removed | Replacement |
 | --- | --- |
