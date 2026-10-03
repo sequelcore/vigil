@@ -1,7 +1,8 @@
 package io.github.sequelcore.vigil.stepup;
 
 import io.github.sequelcore.vigil.autoconfigure.VigilProperties;
-import io.github.sequelcore.vigil.protection.VigilProtectionService;
+import io.github.sequelcore.vigil.login.LoginAttemptStore;
+import io.github.sequelcore.vigil.login.LoginPolicy;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -21,27 +22,31 @@ public final class StepUpAuthorizationService {
 
   private final VigilProperties.StepUp config;
   private final StepUpStore store;
-  private final VigilProtectionService protectionService;
+  private final LoginAttemptStore attempts;
+  private final LoginPolicy policy;
   private final Map<StepUpMethod, StepUpCredentialVerifier> verifiers;
   private final Clock clock;
 
   public StepUpAuthorizationService(
       VigilProperties.StepUp config,
       StepUpStore store,
-      VigilProtectionService protectionService,
+      LoginAttemptStore attempts,
+      LoginPolicy policy,
       java.util.List<StepUpCredentialVerifier> verifiers) {
-    this(config, store, protectionService, verifiers, Clock.systemUTC());
+    this(config, store, attempts, policy, verifiers, Clock.systemUTC());
   }
 
   StepUpAuthorizationService(
       VigilProperties.StepUp config,
       StepUpStore store,
-      VigilProtectionService protectionService,
+      LoginAttemptStore attempts,
+      LoginPolicy policy,
       java.util.List<StepUpCredentialVerifier> verifiers,
       Clock clock) {
     this.config = config;
     this.store = store;
-    this.protectionService = protectionService;
+    this.attempts = attempts;
+    this.policy = policy;
     this.clock = clock;
     this.verifiers =
         verifiers.stream()
@@ -92,17 +97,17 @@ public final class StepUpAuthorizationService {
             StepUpException.Code.SELF_AUTHORIZATION_NOT_ALLOWED,
             "Self-authorization is not allowed");
       }
-      String protectionKey = challenge.tenantId() + ":step-up:" + authorizingActorId;
-      if (protectionService.isLocked(protectionKey)) {
+      String attemptKey = attemptKey(challenge.tenantId(), authorizingActorId);
+      if (attempts.isLocked(attemptKey, now)) {
         throw new StepUpException(StepUpException.Code.ACTOR_LOCKED, "Authorizing actor is locked");
       }
       StepUpCredentialVerifier verifier = verifiers.get(credential.method());
       if (verifier == null
           || !verifier.verify(challenge.tenantId(), authorizingActorId, credential)) {
-        protectionService.recordFailedAttempt(protectionKey);
+        attempts.recordFailure(attemptKey, Instant.now(clock), policy);
         throw new StepUpException(StepUpException.Code.CREDENTIAL_INVALID, "Credential is invalid");
       }
-      protectionService.recordSuccessfulLogin(protectionKey);
+      attempts.reset(attemptKey);
       UUID authorizationId = UUID.randomUUID();
       UUID auditId = UUID.randomUUID();
       StepUpAuthorization authorization =
@@ -147,6 +152,12 @@ public final class StepUpAuthorizationService {
       throw new StepUpException(StepUpException.Code.PROOF_INVALID, "Proof is invalid or expired");
     }
     return authorization;
+  }
+
+  /** Step-up keys are namespaced apart from password-login keys and length-prefixed per part. */
+  private static String attemptKey(Object tenantId, String actorId) {
+    String tenant = String.valueOf(tenantId);
+    return "step-up:" + tenant.length() + ":" + tenant + ":" + actorId;
   }
 
   private static boolean bindingMatches(

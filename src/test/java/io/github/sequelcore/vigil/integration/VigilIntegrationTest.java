@@ -8,7 +8,8 @@ import io.github.sequelcore.vigil.core.jwt.HmacTokenSigner;
 import io.github.sequelcore.vigil.core.jwt.TokenRequest;
 import io.github.sequelcore.vigil.core.jwt.VigilTokenService;
 import io.github.sequelcore.vigil.integration.testapp.TestApplication;
-import io.github.sequelcore.vigil.protection.VigilProtectionService;
+import io.github.sequelcore.vigil.login.LoginAttemptStore;
+import io.github.sequelcore.vigil.login.LoginPolicy;
 import io.jsonwebtoken.Jwts;
 import java.time.Instant;
 import java.util.Date;
@@ -43,16 +44,18 @@ class VigilIntegrationTest {
   @Autowired private TestRestTemplate restTemplate;
   @Autowired private VigilTokenService tokenService;
   @Autowired private VigilBlacklistService blacklistService;
-  @Autowired private VigilProtectionService protectionService;
+  @Autowired private LoginAttemptStore loginAttempts;
+  @Autowired private LoginPolicy loginPolicy;
   @Autowired private VigilProperties properties;
 
   @Test
   void autoConfigurationLoadsBeansAndBindsProperties() {
     assertThat(tokenService).isNotNull();
     assertThat(blacklistService).isNotNull();
-    assertThat(protectionService).isNotNull();
+    assertThat(loginAttempts).isNotNull();
     assertThat(properties.tenant().enabled()).isTrue();
-    assertThat(properties.protection().maxAttempts()).isEqualTo(3);
+    assertThat(properties.login().maxFailures()).isEqualTo(3);
+    assertThat(loginPolicy.maxFailures()).isEqualTo(3);
     assertThat(properties.filter().ignoredPaths()).contains("/actuator/**", "/health");
     assertThat(properties.filter().publicPaths()).contains("/public/**");
   }
@@ -170,15 +173,14 @@ class VigilIntegrationTest {
   }
 
   @Test
-  void protectionLocksAfterMaxAttempts() {
-    String identifier = "user@example.com";
-    protectionService.recordFailedAttempt(identifier);
-    protectionService.recordFailedAttempt(identifier);
-    protectionService.recordFailedAttempt(identifier);
+  void loginStoreLocksAfterConfiguredFailures() {
+    String key = "password:user@example.com";
+    java.time.Instant now = java.time.Instant.now();
+    for (int i = 0; i < properties.login().maxFailures(); i++) {
+      loginAttempts.recordFailure(key, now, loginPolicy);
+    }
 
-    assertThat(protectionService.isLocked(identifier)).isTrue();
-    assertThat(protectionService.getFailedAttempts(identifier))
-        .isGreaterThanOrEqualTo(properties.protection().maxAttempts());
+    assertThat(loginAttempts.isLocked(key, now)).isTrue();
   }
 
   private ResponseEntity<String> exchangeGet(String path, HttpHeaders headers) {

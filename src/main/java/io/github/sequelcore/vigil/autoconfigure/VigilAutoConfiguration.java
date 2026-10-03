@@ -16,7 +16,10 @@ import io.github.sequelcore.vigil.entrypoint.VigilAuthenticationEntryPoint;
 import io.github.sequelcore.vigil.filter.FilterConfig;
 import io.github.sequelcore.vigil.filter.VigilAuthenticationFilter;
 import io.github.sequelcore.vigil.jwks.JwksController;
-import io.github.sequelcore.vigil.protection.VigilProtectionService;
+import io.github.sequelcore.vigil.login.CaffeineLoginAttemptStore;
+import io.github.sequelcore.vigil.login.LoginAttemptStore;
+import io.github.sequelcore.vigil.login.LoginPolicy;
+import io.github.sequelcore.vigil.login.PasswordLoginGuard;
 import io.github.sequelcore.vigil.session.VigilSessionProvider;
 import io.github.sequelcore.vigil.session.VigilSessionService;
 import io.github.sequelcore.vigil.stepup.CaffeineStepUpStore;
@@ -151,15 +154,43 @@ public class VigilAutoConfiguration {
   }
 
   /**
-   * Creates the protection service for brute-force prevention.
+   * Creates the lockout policy shared by password login and step-up PIN verification.
    *
    * @param properties the loaded Vigil properties
-   * @return configured protection service
+   * @return the policy configured under {@code vigil.login}
    */
   @Bean
   @ConditionalOnMissingBean
-  public VigilProtectionService vigilProtectionService(VigilProperties properties) {
-    return new VigilProtectionService(properties.protection());
+  public LoginPolicy vigilLoginPolicy(VigilProperties properties) {
+    return properties.login().toPolicy();
+  }
+
+  /**
+   * Creates the default node-local store of failed-attempt counters. Applications running several
+   * instances replace it with a shared implementation.
+   *
+   * @param policy the lockout policy
+   * @return a bounded in-memory store
+   */
+  @Bean
+  @ConditionalOnMissingBean
+  public LoginAttemptStore vigilLoginAttemptStore(LoginPolicy policy) {
+    return new CaffeineLoginAttemptStore(policy);
+  }
+
+  /**
+   * Creates the password-login guard that applications call from their own login route.
+   *
+   * @param passwordService the password service whose encoder verifies passwords
+   * @param store the failed-attempt store
+   * @param policy the lockout policy
+   * @return the password-login guard
+   */
+  @Bean
+  @ConditionalOnMissingBean
+  public PasswordLoginGuard vigilPasswordLoginGuard(
+      VigilPasswordService passwordService, LoginAttemptStore store, LoginPolicy policy) {
+    return new PasswordLoginGuard(passwordService.encoder(), store, policy);
   }
 
   /** Creates the default single-node store for step-up challenges and proofs. */
@@ -185,9 +216,10 @@ public class VigilAutoConfiguration {
   public StepUpAuthorizationService stepUpAuthorizationService(
       VigilProperties properties,
       StepUpStore store,
-      VigilProtectionService protectionService,
+      LoginAttemptStore attempts,
+      LoginPolicy policy,
       List<StepUpCredentialVerifier> verifiers) {
-    return new StepUpAuthorizationService(properties.stepUp(), store, protectionService, verifiers);
+    return new StepUpAuthorizationService(properties.stepUp(), store, attempts, policy, verifiers);
   }
 
   /**

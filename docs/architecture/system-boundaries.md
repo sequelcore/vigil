@@ -13,6 +13,7 @@ Vigil is authentication infrastructure for Spring Boot applications. It standard
 | Request authentication filter and tenant consistency | `SecurityFilterChain` authorization rules and tenant membership |
 | Password hashing helpers and reset-token validation/invalidation | Password policy, recovery delivery, concurrent reset serialization, and account recovery UX |
 | Step-up challenge/proof lifecycle and credential-verifier SPI | Business approval policy, roles, limits, segregation of duties, and audit decision |
+| `PasswordLoginGuard`: lockout with backoff, equal-cost verification, and a result that hides the failure cause | The login route, user lookup, account status, the single generic error response, per-IP/global rate limits, CAPTCHA/MFA, recovery, and shared counters when running several instances |
 | Opt-in contact-proof lifecycle and receipt orchestration | Enrollment routes, user records, email delivery, canonicalization, abuse controls, durable atomic state, and receipt application |
 
 Vigil is not an OAuth authorization server, OpenID Connect provider, hosted identity platform, user-management system, or business authorization engine.
@@ -40,9 +41,16 @@ Applications add `VigilAuthenticationFilter` inside Spring Security's filter cha
 | `StepUpStore` | atomic shared step-up challenge/proof state | storing PINs or users |
 | `StepUpCredentialVerifier` | a credential method such as PIN or a future passkey | product-specific approval logic |
 | `PinCredentialStore` | tenant-scoped personal PIN hashes | raw PIN storage |
+| `LoginAttemptStore` | atomic failure counters for password login and step-up PIN verification, shared across instances (the default is node-local) | users, passwords, or account status |
 | `EnrollmentStore` | atomic, durable contact-proof and receipt lifecycle | users, credentials, an in-memory/single-node implementation, or load/save coordination |
 | `EnrollmentIdentityPort` | transactionally applying a verified receipt and, when supported, recording finalization permission | user lookup, auto-linking by email, session issuance, credential creation, or credential activation |
 | `EnrollmentDeliveryPort` | application-owned proof delivery | logging proof values or full email addresses |
+
+## Password-login guard
+
+`PasswordLoginGuard`, with `LoginPolicy` and `LoginAttemptStore`, is the single owner of failed-attempt protection in Vigil; step-up PIN verification (`StepUpAuthorizationService`) uses the same policy and store under a separate key namespace. Vigil auto-configures all three, configured under `vigil.login.*`, and an application may replace any of them with its own bean.
+
+The guard is a library call, not a route or filter. The application's route passes the identifier, the password, and a lookup function that returns the user's subject, hash, and active status; Vigil never reads users. A locked identifier is rejected before lookup or hashing, an unknown identifier is verified against a dummy hash and counted like a known one, and every rejection is the same `LoginResult`. The application must return one generic error for it. Design rationale, sources, and known limits: [password-login protection](../security/login-protection.md).
 
 ## Compatibility boundary
 

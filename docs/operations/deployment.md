@@ -22,7 +22,7 @@ The built-in Caffeine implementations are single-node defaults.
 | password reset | provide a shared blacklist backend and serialize concurrent completion for the same reset token |
 | step-up authorization | provide a shared `StepUpStore` with atomic challenge/proof consumption |
 | contact enrollment | provide a shared atomic `EnrollmentStore`; when using decimal codes, share the dedicated code HMAC key across every node |
-| failed-attempt protection | place a shared rate limiter or equivalent protection in front of the application when node-local lockout is insufficient |
+| failed-attempt protection (password login and step-up PIN) | provide a shared `LoginAttemptStore` whose `recordFailure` is atomic per key; the default is node-local, so the effective limit is multiplied by the node count. Also place per-IP and global rate limits in front of the application |
 
 Do not use eventually consistent state for one-time step-up proof consumption. A proof must be
 consumed at most once across all nodes. Reset-token validation and invalidation are separate

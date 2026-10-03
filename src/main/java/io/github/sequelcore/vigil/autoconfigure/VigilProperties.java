@@ -1,5 +1,6 @@
 package io.github.sequelcore.vigil.autoconfigure;
 
+import io.github.sequelcore.vigil.login.LoginPolicy;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
@@ -15,7 +16,7 @@ import org.springframework.validation.annotation.Validated;
  * @param password password hashing configuration
  * @param blacklist token blacklist configuration
  * @param tenant multi-tenant configuration
- * @param protection login protection configuration
+ * @param login failed-attempt lockout configuration
  * @param filter authentication filter configuration
  * @param session session authentication configuration
  * @param reset password reset configuration
@@ -29,7 +30,7 @@ public record VigilProperties(
     Password password,
     Blacklist blacklist,
     Tenant tenant,
-    Protection protection,
+    Login login,
     Filter filter,
     Session session,
     Reset reset,
@@ -44,7 +45,7 @@ public record VigilProperties(
    * @param password password hashing configuration (nullable)
    * @param blacklist token blacklist configuration (nullable)
    * @param tenant multi-tenant configuration (nullable)
-   * @param protection login protection configuration (nullable)
+   * @param login failed-attempt lockout configuration (nullable)
    * @param filter authentication filter configuration (nullable)
    * @param session session authentication configuration (nullable)
    * @param reset password reset configuration (nullable)
@@ -68,8 +69,8 @@ public record VigilProperties(
     if (tenant == null) {
       tenant = new Tenant(false, "X-Tenant-ID");
     }
-    if (protection == null) {
-      protection = new Protection(5, Duration.ofMinutes(15), 10000);
+    if (login == null) {
+      login = new Login(0, null, null, null, 0);
     }
     if (filter == null) {
       filter = new Filter(Collections.emptyList(), Collections.emptyList(), Collections.emptyMap());
@@ -342,30 +343,39 @@ public record VigilProperties(
   }
 
   /**
-   * Login protection configuration.
+   * Failed-attempt lockout shared by the password-login guard and step-up PIN verification.
    *
-   * @param maxAttempts number of attempts before lockout
-   * @param lockDuration how long a lockout lasts
-   * @param maxSize maximum entries to track in cache
+   * @param maxFailures consecutive failures that trigger the first lock; default 5
+   * @param baseLock first lock duration; default 1 minute
+   * @param maxLock upper bound of the doubling lock duration; default 15 minutes
+   * @param failureWindow inactivity after which the failure count restarts; default 15 minutes
+   * @param maxTrackedIdentifiers upper bound of keys tracked by the default store; default 100000
    */
-  public record Protection(int maxAttempts, Duration lockDuration, int maxSize) {
+  public record Login(
+      int maxFailures,
+      Duration baseLock,
+      Duration maxLock,
+      Duration failureWindow,
+      int maxTrackedIdentifiers) {
+    /** Applies the documented defaults to omitted or non-positive values. */
+    public Login {
+      LoginPolicy normalized =
+          LoginPolicy.withDefaults(
+              maxFailures, baseLock, maxLock, failureWindow, maxTrackedIdentifiers);
+      maxFailures = normalized.maxFailures();
+      baseLock = normalized.baseLock();
+      maxLock = normalized.maxLock();
+      failureWindow = normalized.failureWindow();
+      maxTrackedIdentifiers = normalized.maxTrackedIdentifiers();
+    }
+
     /**
-     * Validates and normalizes protection settings.
+     * Converts the configuration to the lockout policy.
      *
-     * @param maxAttempts number of attempts before lockout
-     * @param lockDuration how long a lockout lasts
-     * @param maxSize maximum entries to track in cache
+     * @return the equivalent lockout policy
      */
-    public Protection {
-      if (maxAttempts <= 0) {
-        maxAttempts = 5;
-      }
-      if (lockDuration == null) {
-        lockDuration = Duration.ofMinutes(15);
-      }
-      if (maxSize <= 0) {
-        maxSize = 10000;
-      }
+    public LoginPolicy toPolicy() {
+      return new LoginPolicy(maxFailures, baseLock, maxLock, failureWindow, maxTrackedIdentifiers);
     }
   }
 

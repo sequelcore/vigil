@@ -59,10 +59,12 @@ vigil:
     ttl: 24h
     grace-period: 30s # maximum 60s
 
-  protection:
-    max-attempts: 5
-    lock-duration: 15m
-    max-size: 10000
+  login:
+    max-failures: 5
+    base-lock: 1m
+    max-lock: 15m
+    failure-window: 15m
+    max-tracked-identifiers: 100000
 
   tenant:
     enabled: false
@@ -116,7 +118,9 @@ Spring Boot duration syntax is accepted for duration properties, for example `30
 | `password.strength` | BCrypt cost `4`–`31`; invalid values normalize to `12` |
 | `blacklist.max-size` | Non-positive values normalize to `10000` |
 | `blacklist.grace-period` | Values above `60s` normalize to `60s` |
-| `protection.max-attempts`, `protection.max-size` | Non-positive values normalize to their defaults |
+| `login.max-failures`, `login.max-tracked-identifiers` | Non-positive values normalize to their defaults |
+| `login.base-lock`, `login.failure-window` | Non-positive or omitted values normalize to their defaults |
+| `login.max-lock` | Omitted values, or values shorter than `base-lock`, normalize to the default (`15m`, or `base-lock` if longer) |
 | `step-up.challenge-ttl`, `step-up.proof-ttl` | Non-positive values normalize to their defaults |
 | `step-up.pin.min-length` | Values below `4` normalize to `6` |
 | `step-up.pin.max-length` | Must be at least `min-length` and at most `128`; otherwise normalizes to `12` |
@@ -134,7 +138,8 @@ verification; changing it invalidates pending proofs issued under the prior form
 
 - Invalid JWT signing configuration fails at application startup.
 - `secure: true` requires HTTPS for browser clients.
-- The built-in blacklist, protection, and step-up stores are node-local. See [deployment and operations](../operations/deployment.md) before running more than one instance.
+- `vigil.login.*` configures the lockout shared by `PasswordLoginGuard` and step-up PIN verification: after `max-failures` consecutive failures a key is locked for `base-lock`, the lock doubles on each further failure up to `max-lock`, and failures are forgotten after `failure-window` without a new failure. Password and step-up keys are namespaced separately.
+- The built-in blacklist, login-attempt, and step-up stores are node-local. See [deployment and operations](../operations/deployment.md) before running more than one instance.
 - Enrollment has no built-in store or delivery adapter. When enabled, every enrollment host port is
   required and missing ports fail startup; its store must be durable and atomic across instances.
 - `public-paths` changes Vigil credential processing only. The application must configure its own

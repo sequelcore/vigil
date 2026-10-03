@@ -6,7 +6,9 @@ import io.github.sequelcore.vigil.core.cookie.VigilCookieService;
 import io.github.sequelcore.vigil.core.jwt.HmacTokenSigner;
 import io.github.sequelcore.vigil.core.jwt.VigilTokenService;
 import io.github.sequelcore.vigil.core.password.VigilPasswordService;
-import io.github.sequelcore.vigil.protection.VigilProtectionService;
+import io.github.sequelcore.vigil.login.CaffeineLoginAttemptStore;
+import io.github.sequelcore.vigil.login.LoginAttemptStore;
+import io.github.sequelcore.vigil.login.LoginPolicy;
 import io.github.sequelcore.vigil.tenant.VigilTenantService;
 import java.time.Duration;
 import java.util.Map;
@@ -66,8 +68,9 @@ public class VigilTestConfiguration {
 
   @Bean
   @Primary
-  public VigilProperties.Protection testProtectionProperties() {
-    return new VigilProperties.Protection(5, Duration.ofMinutes(1), 1000);
+  public LoginPolicy testLoginPolicy() {
+    return new LoginPolicy(
+        5, Duration.ofMinutes(1), Duration.ofMinutes(5), Duration.ofMinutes(5), 1000);
   }
 
   @Bean
@@ -109,8 +112,8 @@ public class VigilTestConfiguration {
 
   @Bean
   @Primary
-  public VigilProtectionService testProtectionService() {
-    return new VigilProtectionService(testProtectionProperties());
+  public LoginAttemptStore testLoginAttemptStore() {
+    return new CaffeineLoginAttemptStore(testLoginPolicy());
   }
 
   @Bean

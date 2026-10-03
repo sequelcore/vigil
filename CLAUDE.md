@@ -60,7 +60,7 @@ io.github.sequelcore.vigil/
 ├── entrypoint/              # VigilAuthenticationEntryPoint (RFC 6750)
 ├── filter/                  # VigilAuthenticationFilter
 ├── jwks/                    # JwksController (/.well-known/jwks.json, RS256 only)
-├── protection/              # VigilProtectionService (brute-force)
+├── login/                   # PasswordLoginGuard, LoginPolicy, LoginAttemptStore (failed-attempt lockout)
 ├── session/                 # VigilSessionService, VigilSessionProvider
 └── tenant/                  # VigilTenantService, VigilTenantContext
 ```
@@ -91,7 +91,7 @@ io.github.sequelcore.vigil/
 | `VigilPasswordService` | BCrypt hashing, strength scoring, rehash detection |
 | `VigilCookieService` | HTTP-Only cookie management with profiles |
 | `VigilBlacklistService` | Token and subject invalidation |
-| `VigilProtectionService` | Brute-force prevention, account lockout |
+| `PasswordLoginGuard` | Password-login lockout, equal-cost verification; shares `LoginPolicy`/`LoginAttemptStore` with step-up PIN |
 | `VigilAuthService` | Login, logout, refresh orchestration |
 | `VigilSessionService` | Guest session token management |
 | `VigilTenantService` | Multi-tenant header validation |
