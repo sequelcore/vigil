@@ -7,6 +7,50 @@ include migration notes.
 
 ## Unreleased
 
+### Breaking changes (next release: 9.0.0)
+
+- Added `PasswordLoginGuard`, a route-free password-login guard for application-owned login
+  routes: per-identifier lockout with doubling backoff, immediate rejection of locked identifiers,
+  equal-cost verification for unknown users, a single non-revealing `LoginResult`, and an
+  optional `needsRehash` signal. It is the single owner of failed-attempt protection.
+- Removed `VigilProtectionService`, its auto-configured bean, and the `vigil.protection.*`
+  properties (`VigilProperties.Protection`, `VigilProperties#protection()`). There is no
+  deprecation, alias, or compatibility path.
+- Step-up PIN verification (`StepUpAuthorizationService`) now uses `LoginAttemptStore` and
+  `LoginPolicy` instead of `VigilProtectionService`. Step-up keys (`step-up:` namespace, per
+  tenant and authorizing actor) are separate from password-login keys (`password:` namespace), so
+  a PIN lock and a password lock do not affect each other.
+- Added auto-configured, replaceable `LoginPolicy`, `LoginAttemptStore` (node-local Caffeine
+  default), and `PasswordLoginGuard` beans, configured under `vigil.login.*`.
+- Behavior change: lockouts are no longer a fixed duration. After `max-failures` failures the lock
+  lasts `base-lock` and doubles on each further failure up to `max-lock`; failures are forgotten
+  after `failure-window`. Failures during a lock are not counted.
+
+### Migration
+
+| Removed | Replacement |
+| --- | --- |
+| `VigilProtectionService` | `PasswordLoginGuard` for password login; `LoginAttemptStore` and `LoginPolicy` for any other credential |
+| `VigilProtectionService.isLocked(id)` | `LoginAttemptStore.isLocked(key, now)`, or call `PasswordLoginGuard.authenticate`, which refuses a locked identifier |
+| `VigilProtectionService.recordFailedAttempt(id)` | `LoginAttemptStore.recordFailure(key, now, policy)`; `PasswordLoginGuard` records failures itself |
+| `VigilProtectionService.recordSuccessfulLogin(id)` | `LoginAttemptStore.reset(key)`; `PasswordLoginGuard` resets on success |
+| `VigilProtectionService.unlock(id)` | `LoginAttemptStore.reset(key)` with the namespaced key (`password:<lowercase identifier>`) |
+| `VigilProtectionService.getFailedAttempts(id)` | None; counters are internal to the store |
+| `VigilProtectionService` bean | `PasswordLoginGuard`, `LoginPolicy`, and `LoginAttemptStore` beans |
+| `VigilProperties.Protection`, `VigilProperties#protection()` | `VigilProperties.Login`, `VigilProperties#login()` |
+| `vigil.protection.max-attempts` | `vigil.login.max-failures` |
+| `vigil.protection.lock-duration` | `vigil.login.base-lock` (first lock) and `vigil.login.max-lock` (ceiling) |
+| `vigil.protection.max-size` | `vigil.login.max-tracked-identifiers` |
+| (none) | `vigil.login.failure-window` |
+| `new StepUpAuthorizationService(config, store, protectionService, verifiers)` | `new StepUpAuthorizationService(config, store, loginAttemptStore, loginPolicy, verifiers)` |
+
+Applications that called `VigilProtectionService` from their login route should call
+`PasswordLoginGuard.authenticate(identifier, password, lookup)` and return one generic error for
+every rejection. Applications running several instances must provide a shared
+`LoginAttemptStore`, which also now backs step-up PIN lockout. Default thresholds changed from
+5 attempts with a fixed 15-minute lock to 5 failures with a 1-minute lock doubling to 15 minutes;
+set `vigil.login.base-lock` and `vigil.login.max-lock` to `15m` to keep the previous duration.
+
 ## 8.0.1 - 2026-09-13
 
 - Clarified the host-owned contact-enrollment contract: a pending password verifier may be

@@ -24,6 +24,7 @@ Vigil is a Spring Boot starter for application-owned JWT authentication. Read
 ## Security and operations
 
 - [Security model](security/security-model.md) — security controls, threat assumptions, and secret-handling rules.
+- [Password-login protection](security/login-protection.md) — sources, design, and limits of `PasswordLoginGuard`.
 - [Step-up authorization](security/step-up-authorization.md) — one-time authorization proofs and personal PIN integration.
 - [Deployment and operations](operations/deployment.md) — production configuration, key rotation, and multi-instance requirements.
 

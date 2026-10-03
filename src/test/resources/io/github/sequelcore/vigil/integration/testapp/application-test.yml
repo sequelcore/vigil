@@ -13,5 +13,5 @@ vigil:
       - /csrf
   tenant:
     enabled: true
-  protection:
-    max-attempts: 3
+  login:
+    max-failures: 3

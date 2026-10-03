@@ -51,17 +51,23 @@ configure matching `permitAll` rules when anonymous access is intended.
 
 ## 3. Issue tokens after application credential validation
 
-For browser clients, validate the credential in the application and let Vigil write HTTP-only cookies:
+Validate the credential through `PasswordLoginGuard`, which Vigil auto-configures, and issue tokens only on success. The application keeps the route, the user lookup, and the account status; the guard applies lockout, verifies a password in equal time whether or not the user exists, and returns a result that does not reveal which part failed:
 
 ```java
 AuthResult login(LoginRequest request, HttpServletResponse response) {
-  User user = users.findByEmail(request.email())
-      .filter(candidate -> passwords.matches(request.password(), candidate.passwordHash()))
-      .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
+  LoginResult result = guard.authenticate(request.email(), request.password(),
+      email -> users.findByEmail(email)
+          .map(user -> new LoginAccount(user.id().toString(), user.passwordHash(), user.enabled())));
 
+  if (!result.authenticated()) {
+    throw new BadCredentialsException("Invalid credentials"); // identical for every cause
+  }
+  User user = users.findById(result.subject()).orElseThrow();
   return authService.login(response, user.id().toString(), Map.of("tenantId", user.tenantId()));
 }
 ```
+
+The lockout is configured under `vigil.login.*` (see the [configuration reference](../reference/configuration.md)) and is shared with step-up PIN verification under a separate key namespace. The default store is node-local; applications running several instances provide a shared `LoginAttemptStore`. Design, sources, and limits are in [password-login protection](../security/login-protection.md).
 
 For native clients and APIs, call `authService.login(subject, claims)` and return the `AuthResult` through the application's own route. Store native tokens in platform secure storage.
 

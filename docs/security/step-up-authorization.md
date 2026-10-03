@@ -64,7 +64,7 @@ Do not deserialize a PIN into an immutable `String` if the application can avoid
 
 The default `CaffeineStepUpStore` is suitable only for a single application instance. A cluster must provide one shared `StepUpStore` whose challenge and proof consumption are atomic across nodes. Store only the SHA-256 digest of the opaque proof, preserve expiry, and retain a used-proof marker through the proof TTL to return `PROOF_ALREADY_USED` deterministically.
 
-The existing `VigilProtectionService` applies failed-attempt counters and lockout per `{tenant}:step-up:{authorizingActor}`. For clustered brute-force protection, applications should already replace or front this in-memory mechanism with shared rate limiting; otherwise lockouts are node-local.
+Step-up PIN verification uses the same failed-attempt mechanism as password login: the `LoginPolicy` configured under `vigil.login.*` and the `LoginAttemptStore`. Counters are keyed per tenant and authorizing actor in the `step-up:` namespace, which is separate from the `password:` namespace, so a PIN lock and a password lock do not affect each other. The default store is node-local; a cluster provides a shared `LoginAttemptStore` with atomic failure recording, otherwise lockouts are per node.
 
 ## Threat model
 
@@ -73,7 +73,7 @@ The existing `VigilProtectionService` applies failed-attempt counters and lockou
 | Proof replay | 256-bit opaque proof, server-side digest storage, atomic one-time consumption |
 | Cross-service reuse | exact tenant, audience, and purpose binding |
 | Stale approval | independent short challenge and proof TTLs |
-| PIN guessing | BCrypt, configurable numeric policy, failed-attempt counter and lockout |
+| PIN guessing | BCrypt, configurable numeric policy, failed-attempt counter and lockout with backoff (`vigil.login.*`) |
 | Session substitution | no cookie, JWT, or `SecurityContext` mutation by this API |
 | Secret exposure | no PIN/hash/proof logging; close `PinCredential` promptly |
 | Distributed races | required shared store with atomic consume for multi-instance deployments |

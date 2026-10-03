@@ -17,7 +17,9 @@ import io.github.sequelcore.vigil.core.jwt.VigilTokenService;
 import io.github.sequelcore.vigil.core.password.VigilPasswordService;
 import io.github.sequelcore.vigil.entrypoint.VigilAuthenticationEntryPoint;
 import io.github.sequelcore.vigil.filter.VigilAuthenticationFilter;
-import io.github.sequelcore.vigil.protection.VigilProtectionService;
+import io.github.sequelcore.vigil.login.LoginAttemptStore;
+import io.github.sequelcore.vigil.login.LoginPolicy;
+import io.github.sequelcore.vigil.login.PasswordLoginGuard;
 import io.github.sequelcore.vigil.session.VigilSessionService;
 import io.github.sequelcore.vigil.tenant.VigilTenantService;
 import java.time.Duration;
@@ -53,13 +55,59 @@ class VigilAutoConfigurationTest {
           assertThat(context).hasSingleBean(VigilTokenService.class);
           assertThat(context).hasSingleBean(VigilPasswordService.class);
           assertThat(context).hasSingleBean(VigilCookieService.class);
-          assertThat(context).hasSingleBean(VigilProtectionService.class);
+          assertThat(context).hasSingleBean(LoginPolicy.class);
+          assertThat(context).hasSingleBean(LoginAttemptStore.class);
+          assertThat(context).hasSingleBean(PasswordLoginGuard.class);
           assertThat(context).hasSingleBean(VigilAuthService.class);
           assertThat(context).hasSingleBean(VigilResetTokenService.class);
           assertThat(context).hasSingleBean(VigilAuthenticationEntryPoint.class);
           assertThat(context).hasSingleBean(VigilAuthenticationFilter.class);
           assertThat(context).doesNotHaveBean(UserDetailsService.class);
         });
+  }
+
+  @Test
+  @DisplayName("Binds vigil.login.* into the lockout policy")
+  void bindsLoginPolicy() {
+    contextRunner
+        .withPropertyValues(
+            "vigil.login.max-failures=3",
+            "vigil.login.base-lock=30s",
+            "vigil.login.max-lock=5m",
+            "vigil.login.failure-window=20m",
+            "vigil.login.max-tracked-identifiers=500")
+        .run(
+            context ->
+                assertThat(context.getBean(LoginPolicy.class))
+                    .isEqualTo(
+                        new LoginPolicy(
+                            3,
+                            Duration.ofSeconds(30),
+                            Duration.ofMinutes(5),
+                            Duration.ofMinutes(20),
+                            500)));
+    contextRunner.run(
+        context ->
+            assertThat(context.getBean(LoginPolicy.class)).isEqualTo(LoginPolicy.defaults()));
+  }
+
+  @Test
+  @DisplayName("Lets applications replace the policy, store, and guard")
+  void loginBeansAreReplaceable() {
+    LoginPolicy policy =
+        new LoginPolicy(2, Duration.ofSeconds(1), Duration.ofSeconds(2), Duration.ofSeconds(3), 10);
+    LoginAttemptStore store = mock(LoginAttemptStore.class);
+    PasswordLoginGuard guard = mock(PasswordLoginGuard.class);
+    contextRunner
+        .withBean(LoginPolicy.class, () -> policy)
+        .withBean(LoginAttemptStore.class, () -> store)
+        .withBean(PasswordLoginGuard.class, () -> guard)
+        .run(
+            context -> {
+              assertThat(context.getBean(LoginPolicy.class)).isSameAs(policy);
+              assertThat(context.getBean(LoginAttemptStore.class)).isSameAs(store);
+              assertThat(context.getBean(PasswordLoginGuard.class)).isSameAs(guard);
+            });
   }
 
   @Test

@@ -44,6 +44,40 @@ Follow the complete [authentication guide](docs/guides/authentication.md) to ins
 request-scoped security repository, stateless session policy, and application authorization rules.
 `ignored-paths` skips Vigil processing; it does not grant anonymous access.
 
+## Password-login guard
+
+`PasswordLoginGuard` is the single owner of failed-attempt protection in Vigil. The application
+keeps its login route, user lookup, and account status; the guard adds per-identifier lockout with
+backoff, equal-cost verification for unknown users, and a result that does not reveal why a login
+failed. Step-up PIN verification uses the same `LoginPolicy` and `LoginAttemptStore` under a
+separate key namespace, so a PIN lock and a password lock are independent.
+
+Vigil auto-configures `LoginPolicy` (from `vigil.login.*`), a node-local `LoginAttemptStore`, and
+the `PasswordLoginGuard`; an application replaces any of them by declaring its own bean. Clusters
+must supply a shared `LoginAttemptStore`. See
+[password-login protection](docs/security/login-protection.md).
+
+```yaml
+vigil:
+  login:
+    max-failures: 5
+    base-lock: 1m
+    max-lock: 15m
+```
+
+```java
+@PostMapping("/auth/login")
+ResponseEntity<?> login(@RequestBody LoginRequest request, HttpServletResponse response) {
+  LoginResult result = guard.authenticate(request.email(), request.password(),
+      email -> users.findByEmail(email)
+          .map(u -> new LoginAccount(u.id().toString(), u.passwordHash(), u.enabled())));
+  if (!result.authenticated()) {
+    return ResponseEntity.status(401).body("Invalid credentials"); // same for every cause
+  }
+  return ResponseEntity.ok(authService.login(response, result.subject(), Map.of()));
+}
+```
+
 ## Documentation
 
 Start at the [documentation index](docs/README.md). The primary integration references are:
